@@ -2028,3 +2028,202 @@ img {
     font-size: 24px;
   }
 }
+
+/* ============================================
+   Account Recovery & Recovery Key Display
+   ============================================ */
+
+.recovery-card {
+  max-width: 480px;
+  animation: slideUp 0.4s ease;
+}
+
+.recovery-header {
+  text-align: center;
+  margin-bottom: var(--space-lg);
+}
+
+.recovery-icon {
+  font-size: 48px;
+  margin-bottom: var(--space-sm);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+.recovery-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: var(--space-xs);
+}
+
+.recovery-subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.recovery-key-box {
+  background: var(--bg-primary);
+  border: 2px solid var(--accent-amber);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md);
+  margin-bottom: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  position: relative;
+  overflow: hidden;
+}
+
+.recovery-key-box::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(245, 158, 11, 0.05);
+  pointer-events: none;
+}
+
+.recovery-key-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--accent-amber);
+  text-align: center;
+  letter-spacing: 0.08em;
+  word-break: break-all;
+  user-select: all;
+  cursor: text;
+  padding: var(--space-sm);
+  position: relative;
+}
+
+.recovery-copy-btn {
+  align-self: center;
+  padding: 8px 20px;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: var(--radius-md);
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--accent-amber);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.recovery-copy-btn:hover {
+  background: rgba(245, 158, 11, 0.2);
+  border-color: rgba(245, 158, 11, 0.5);
+}
+
+.recovery-warnings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-lg);
+}
+
+.recovery-warning-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  padding: 10px 14px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+}
+
+.recovery-confirm-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  margin-bottom: var(--space-md);
+  padding: var(--space-sm);
+  border-radius: var(--radius-sm);
+  transition: background 0.15s ease;
+}
+
+.recovery-confirm-label:hover {
+  background: var(--bg-hover);
+}
+
+.recovery-confirm-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent-cyan);
+  cursor: pointer;
+}
+
+/* Forgot Password Link */
+.forgot-password-btn {
+  display: block;
+  width: 100%;
+  text-align: center;
+  margin-top: var(--space-sm);
+  padding: var(--space-sm);
+  border: none;
+  background: none;
+  color: var(--accent-cyan);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+  text-decoration: none;
+}
+
+.forgot-password-btn:hover {
+  opacity: 0.8;
+  text-decoration: underline;
+}
+
+/* Recovery Form */
+.recovery-form-header {
+  margin-bottom: var(--space-md);
+}
+
+.recovery-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  border: none;
+  background: none;
+  color: var(--accent-cyan);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  margin-bottom: var(--space-sm);
+  transition: opacity 0.15s ease;
+}
+
+.recovery-back-btn:hover {
+  opacity: 0.8;
+}
+
+.recovery-form-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: var(--space-xs);
+}
+
+.recovery-form-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}

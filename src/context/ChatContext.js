@@ -18,6 +18,7 @@ import {
   decryptMessage,
   wrapPrivateKey,
   unwrapPrivateKey,
+  generateRecoveryKey,
 } from '@/lib/crypto';
 import {
   storeWrappedPrivateKey,
@@ -74,6 +75,11 @@ export function ChatProvider({ children }) {
       // Wrap private key with passphrase (for cross-device recovery)
       const wrappedKey = await wrapPrivateKey(privateKeyJwk, password);
 
+      // Generate recovery key and wrap private key with it too
+      const recoveryKey = generateRecoveryKey();
+      const recoveryKeyRaw = recoveryKey.replace(/-/g, '');
+      const recoveryWrappedKey = await wrapPrivateKey(privateKeyJwk, recoveryKeyRaw);
+
       const res = await fetch('/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -83,6 +89,8 @@ export function ChatProvider({ children }) {
           password,
           publicKey: publicKeyJwk,
           wrappedPrivateKey: wrappedKey,
+          recoveryKey: recoveryKeyRaw,
+          recoveryWrappedKey,
         }),
       });
 
@@ -93,17 +101,22 @@ export function ChatProvider({ children }) {
       privateKeyRef.current = keyPair.privateKey;
       passphraseRef.current = password;
 
-      localStorage.setItem('cipherchat_token', data.token);
-      localStorage.setItem('cipherchat_user', JSON.stringify(data.user));
-
-      setUser(data.user);
-      setToken(data.token);
-      initSocket(data.user.id, data.user.username);
-
-      return true;
+      // DON'T set user yet — return data + callback so AuthForm can show
+      // the recovery key screen first, then call completeRegistration()
+      return {
+        success: true,
+        recoveryKey,
+        completeRegistration: () => {
+          localStorage.setItem('cipherchat_token', data.token);
+          localStorage.setItem('cipherchat_user', JSON.stringify(data.user));
+          setUser(data.user);
+          setToken(data.token);
+          initSocket(data.user.id, data.user.username);
+        },
+      };
     } catch (err) {
       setAuthError(err.message);
-      return false;
+      return { success: false };
     }
   }, []);
 
@@ -156,6 +169,76 @@ export function ChatProvider({ children }) {
       }
 
       passphraseRef.current = password;
+      localStorage.setItem('cipherchat_token', data.token);
+      localStorage.setItem('cipherchat_user', JSON.stringify(data.user));
+
+      setUser(data.user);
+      setToken(data.token);
+      initSocket(data.user.id, data.user.username);
+
+      return true;
+    } catch (err) {
+      setAuthError(err.message);
+      return false;
+    }
+  }, []);
+
+  const recoverAccount = useCallback(async (username, recoveryKey, newPassword) => {
+    setAuthError('');
+    try {
+      const recoveryKeyRaw = recoveryKey.replace(/-/g, '').toUpperCase();
+
+      const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'recover',
+          username,
+          recoveryKey: recoveryKeyRaw,
+          newPassword,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      // Unwrap private key using recovery key
+      let keyRestored = false;
+      if (data.recoveryWrappedKey) {
+        try {
+          privateKeyRef.current = await unwrapPrivateKey(data.recoveryWrappedKey, recoveryKeyRaw);
+          keyRestored = true;
+
+          // Re-wrap with new password and update server
+          const privateKeyJwk = await exportPrivateKey(privateKeyRef.current);
+          const newWrappedKey = await wrapPrivateKey(privateKeyJwk, newPassword);
+          await storeWrappedPrivateKey(data.user.id, newWrappedKey);
+
+          // Update the server with the new password-wrapped key
+          await fetch('/api/auth/update-key', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId: data.user.id,
+              token: data.token,
+              wrappedPrivateKey: newWrappedKey,
+            }),
+          });
+        } catch (err) {
+          console.error('Recovery unwrap failed:', err);
+        }
+      }
+
+      if (!keyRestored) {
+        // Can't recover the key — generate new one
+        const keyPair = await generateKeyPair();
+        const privateKeyJwk = await exportPrivateKey(keyPair.privateKey);
+        const newWrapped = await wrapPrivateKey(privateKeyJwk, newPassword);
+        await storeWrappedPrivateKey(data.user.id, newWrapped);
+        privateKeyRef.current = keyPair.privateKey;
+      }
+
+      passphraseRef.current = newPassword;
       localStorage.setItem('cipherchat_token', data.token);
       localStorage.setItem('cipherchat_user', JSON.stringify(data.user));
 
@@ -767,6 +850,9 @@ export function ChatProvider({ children }) {
   }, [user, activeConversation, callState, callType, loadMessages, loadConversations, endCallCleanup]);
 
   // ---- Session Restore ----
+  // Note: We force re-login because the private key can't be recovered
+  // without the password. Session keys are cached in IndexedDB and will
+  // work for existing conversations, but new key derivations need the private key.
 
   useEffect(() => {
     const restore = async () => {
@@ -775,10 +861,11 @@ export function ChatProvider({ children }) {
         const savedUser = localStorage.getItem('cipherchat_user');
 
         if (savedToken && savedUser) {
-          const parsed = JSON.parse(savedUser);
-          setUser(parsed);
-          setToken(savedToken);
-          initSocket(parsed.id, parsed.username);
+          // We have a saved session, but no private key in memory.
+          // Force re-login so the user provides their password to unwrap the key.
+          // Clear the saved session to show the login screen.
+          localStorage.removeItem('cipherchat_token');
+          localStorage.removeItem('cipherchat_user');
         }
       } catch (err) {
         console.error('Session restore error:', err);
@@ -825,6 +912,9 @@ export function ChatProvider({ children }) {
 
     // Groups (Phase 2)
     createGroup,
+
+    // Recovery
+    recoverAccount,
   };
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;

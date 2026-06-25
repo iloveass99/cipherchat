@@ -245,3 +245,18 @@ export async function getKeyFingerprint(publicKeyJwk) {
     .match(/.{1,4}/g)
     .join(' ');
 }
+
+/**
+ * Generate a random recovery key (24 chars, grouped for readability)
+ * Format: XXXX-XXXX-XXXX-XXXX-XXXX-XXXX
+ */
+export function generateRecoveryKey() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // No I/O/0/1 to avoid confusion
+  const bytes = crypto.getRandomValues(new Uint8Array(24));
+  let key = '';
+  for (let i = 0; i < 24; i++) {
+    key += chars[bytes[i] % chars.length];
+  }
+  return key.match(/.{4}/g).join('-');
+}
+

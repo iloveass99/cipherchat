@@ -44,6 +44,8 @@ db.exec(`
     password_hash TEXT NOT NULL,
     public_key TEXT NOT NULL,
     wrapped_private_key TEXT DEFAULT NULL,
+    recovery_key_hash TEXT DEFAULT NULL,
+    recovery_wrapped_key TEXT DEFAULT NULL,
     created_at INTEGER DEFAULT (unixepoch())
   );
 
@@ -122,6 +124,15 @@ try {
   db.exec("ALTER TABLE conversations ADD COLUMN group_name TEXT DEFAULT NULL");
   db.exec("ALTER TABLE conversations ADD COLUMN group_admin TEXT DEFAULT NULL");
   console.log('📦 Migration: added group columns');
+}
+
+// Migration: add recovery columns if missing
+try {
+  db.prepare("SELECT recovery_key_hash FROM users LIMIT 1").get();
+} catch {
+  db.exec("ALTER TABLE users ADD COLUMN recovery_key_hash TEXT DEFAULT NULL");
+  db.exec("ALTER TABLE users ADD COLUMN recovery_wrapped_key TEXT DEFAULT NULL");
+  console.log('📦 Migration: added recovery columns');
 }
 
 
