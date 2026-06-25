@@ -1,8 +1,9 @@
 'use client';
 
 /**
- * CipherChat — Chat View
- * Main chat interface with sidebar, chat window, and message input
+ * CipherChat — Chat View (Phase 2)
+ * Main chat interface with sidebar, chat window, message input,
+ * call screens, and group creation
  */
 
 import { useState } from 'react';
@@ -11,10 +12,14 @@ import ChatSidebar from '@/components/ChatSidebar';
 import ChatWindow from '@/components/ChatWindow';
 import MessageInput from '@/components/MessageInput';
 import UserSearch from '@/components/UserSearch';
+import CreateGroup from '@/components/CreateGroup';
+import CallScreen from '@/components/CallScreen';
+import IncomingCall from '@/components/IncomingCall';
 
 export default function ChatView() {
   const [showUserSearch, setShowUserSearch] = useState(false);
-  const { activeConversation } = useChat();
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const { activeConversation, callState } = useChat();
 
   return (
     <>
@@ -22,7 +27,10 @@ export default function ChatView() {
       <div className="grid-overlay" />
 
       <div className={`chat-layout ${activeConversation ? 'chat-open' : ''}`}>
-        <ChatSidebar onOpenSearch={() => setShowUserSearch(true)} />
+        <ChatSidebar
+          onOpenSearch={() => setShowUserSearch(true)}
+          onOpenCreateGroup={() => setShowCreateGroup(true)}
+        />
 
         <div className="chat-main">
           <ChatWindow />
@@ -30,10 +38,20 @@ export default function ChatView() {
         </div>
       </div>
 
+      {/* Modals */}
       <UserSearch
         isOpen={showUserSearch}
         onClose={() => setShowUserSearch(false)}
       />
+
+      <CreateGroup
+        isOpen={showCreateGroup}
+        onClose={() => setShowCreateGroup(false)}
+      />
+
+      {/* Call UI */}
+      {callState === 'incoming' && <IncomingCall />}
+      {(callState === 'active' || callState === 'ringing') && <CallScreen />}
     </>
   );
 }

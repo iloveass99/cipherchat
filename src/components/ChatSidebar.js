@@ -1,14 +1,14 @@
 'use client';
 
 /**
- * CipherChat — Chat Sidebar
- * Conversation list with search, online indicators, and unread badges
+ * CipherChat — Chat Sidebar (Phase 2)
+ * Conversation list with search, online indicators, unread badges, and group support
  */
 
 import { useState, useEffect, useCallback } from 'react';
 import { useChat } from '@/context/ChatContext';
 
-export default function ChatSidebar({ onOpenSearch }) {
+export default function ChatSidebar({ onOpenSearch, onOpenCreateGroup }) {
   const {
     user,
     conversations,
@@ -30,13 +30,31 @@ export default function ChatSidebar({ onOpenSearch }) {
       for (const conv of conversations) {
         if (conv.last_message_content && conv.last_message_iv) {
           try {
+            // For groups, we need the right key. For now, use the first member's key.
+            const pubKey = conv.is_group
+              ? conv.members?.[0]?.public_key
+              : conv.other_public_key;
+
+            if (!pubKey) {
+              previews[conv.id] = '🔒 Encrypted message';
+              continue;
+            }
+
             const text = await decryptMessageContent(
               conv.last_message_content,
               conv.last_message_iv,
               conv.id,
-              conv.other_public_key
+              pubKey
             );
-            previews[conv.id] = text.length > 40 ? text.slice(0, 40) + '...' : text;
+
+            let preview = text.length > 35 ? text.slice(0, 35) + '...' : text;
+
+            // For groups, show sender name in preview
+            if (conv.is_group && conv.last_message_sender_name) {
+              preview = `${conv.last_message_sender_name}: ${preview}`;
+            }
+
+            previews[conv.id] = preview;
           } catch {
             previews[conv.id] = '🔒 Encrypted message';
           }
@@ -50,9 +68,10 @@ export default function ChatSidebar({ onOpenSearch }) {
     }
   }, [conversations, decryptMessageContent]);
 
-  const filteredConversations = conversations.filter(conv =>
-    conv.other_username?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredConversations = conversations.filter(conv => {
+    const name = conv.is_group ? conv.group_name : conv.other_username;
+    return name?.toLowerCase().includes(searchQuery.toLowerCase());
+  });
 
   const formatTime = useCallback((timestamp) => {
     if (!timestamp) return '';
@@ -81,6 +100,14 @@ export default function ChatSidebar({ onOpenSearch }) {
           <span className="sidebar-logo-text">CipherChat</span>
         </div>
         <div className="sidebar-actions">
+          <button
+            className="icon-btn"
+            onClick={onOpenCreateGroup}
+            title="New group"
+            type="button"
+          >
+            👥
+          </button>
           <button
             className="icon-btn"
             onClick={onOpenSearch}
@@ -119,7 +146,9 @@ export default function ChatSidebar({ onOpenSearch }) {
           </div>
         ) : (
           filteredConversations.map(conv => {
-            const isOnline = onlineUsers.has(conv.other_user_id);
+            const isGroup = conv.is_group === 1;
+            const convName = isGroup ? conv.group_name : conv.other_username;
+            const isOnline = isGroup ? false : onlineUsers.has(conv.other_user_id);
             const isActive = activeConversation?.id === conv.id;
             const isTyping = typingUsers[conv.id];
 
@@ -129,17 +158,37 @@ export default function ChatSidebar({ onOpenSearch }) {
                 className={`conversation-item ${isActive ? 'active' : ''}`}
                 onClick={() => selectConversation(conv)}
               >
-                <div className="conversation-avatar">
-                  {getInitials(conv.other_username)}
-                  <span className={`status-dot ${isOnline ? 'online' : 'offline'}`} />
+                <div
+                  className="conversation-avatar"
+                  style={isGroup ? {
+                    background: 'linear-gradient(135deg, var(--accent-cyan), var(--accent-green))',
+                    fontSize: '16px',
+                  } : undefined}
+                >
+                  {isGroup ? '👥' : getInitials(convName)}
+                  {!isGroup && (
+                    <span className={`status-dot ${isOnline ? 'online' : 'offline'}`} />
+                  )}
                 </div>
 
                 <div className="conversation-info">
-                  <div className="conversation-name">{conv.other_username}</div>
+                  <div className="conversation-name">
+                    {convName}
+                    {isGroup && (
+                      <span style={{
+                        fontSize: '11px',
+                        color: 'var(--text-tertiary)',
+                        marginLeft: '6px',
+                        fontWeight: 400,
+                      }}>
+                        ({conv.member_count || conv.members?.length || 0})
+                      </span>
+                    )}
+                  </div>
                   <div className="conversation-preview">
                     {isTyping ? (
                       <span style={{ color: 'var(--accent-cyan)', fontStyle: 'italic' }}>
-                        typing...
+                        {isTyping.username} is typing...
                       </span>
                     ) : conv.last_message_sender === user?.id ? (
                       <>

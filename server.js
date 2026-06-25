@@ -1,8 +1,10 @@
 /**
- * CipherChat — Custom Server
+ * CipherChat — Custom Server (Phase 2)
  * 
  * Runs Next.js + Socket.io on a single port.
  * The server is a BLIND RELAY — it only sees ciphertext.
+ * 
+ * Phase 2: Groups, Calls (WebRTC signaling), Enhanced Read Receipts
  */
 
 import { createServer } from 'http';
@@ -41,17 +43,30 @@ db.exec(`
     username TEXT UNIQUE NOT NULL COLLATE NOCASE,
     password_hash TEXT NOT NULL,
     public_key TEXT NOT NULL,
+    wrapped_private_key TEXT DEFAULT NULL,
     created_at INTEGER DEFAULT (unixepoch())
   );
 
   CREATE TABLE IF NOT EXISTS conversations (
     id TEXT PRIMARY KEY,
-    participant_1 TEXT NOT NULL,
-    participant_2 TEXT NOT NULL,
+    participant_1 TEXT,
+    participant_2 TEXT,
+    is_group INTEGER DEFAULT 0,
+    group_name TEXT DEFAULT NULL,
+    group_admin TEXT DEFAULT NULL,
     created_at INTEGER DEFAULT (unixepoch()),
     FOREIGN KEY (participant_1) REFERENCES users(id),
-    FOREIGN KEY (participant_2) REFERENCES users(id),
-    UNIQUE(participant_1, participant_2)
+    FOREIGN KEY (participant_2) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS group_members (
+    conversation_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    role TEXT DEFAULT 'member',
+    joined_at INTEGER DEFAULT (unixepoch()),
+    PRIMARY KEY (conversation_id, user_id),
+    FOREIGN KEY (conversation_id) REFERENCES conversations(id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
   );
 
   CREATE TABLE IF NOT EXISTS messages (
@@ -67,18 +82,52 @@ db.exec(`
     FOREIGN KEY (sender_id) REFERENCES users(id)
   );
 
+  CREATE TABLE IF NOT EXISTS call_logs (
+    id TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL,
+    caller_id TEXT NOT NULL,
+    call_type TEXT NOT NULL DEFAULT 'audio',
+    status TEXT NOT NULL DEFAULT 'ringing',
+    started_at INTEGER DEFAULT (unixepoch()),
+    ended_at INTEGER DEFAULT NULL,
+    FOREIGN KEY (conversation_id) REFERENCES conversations(id),
+    FOREIGN KEY (caller_id) REFERENCES users(id)
+  );
+
   CREATE INDEX IF NOT EXISTS idx_messages_conversation 
     ON messages(conversation_id, timestamp);
   CREATE INDEX IF NOT EXISTS idx_messages_expires 
     ON messages(expires_at) WHERE expires_at IS NOT NULL;
   CREATE INDEX IF NOT EXISTS idx_conversations_participants
     ON conversations(participant_1, participant_2);
+  CREATE INDEX IF NOT EXISTS idx_group_members_user
+    ON group_members(user_id);
 `);
 
 console.log('📦 Database initialized');
 
-// Online users tracking: userId -> Set of socketIds
+// Migration: add wrapped_private_key column if missing (for existing DBs)
+try {
+  db.prepare("SELECT wrapped_private_key FROM users LIMIT 1").get();
+} catch {
+  db.exec("ALTER TABLE users ADD COLUMN wrapped_private_key TEXT DEFAULT NULL");
+  console.log('📦 Migration: added wrapped_private_key column');
+}
+
+// Migration: add is_group column if missing
+try {
+  db.prepare("SELECT is_group FROM conversations LIMIT 1").get();
+} catch {
+  db.exec("ALTER TABLE conversations ADD COLUMN is_group INTEGER DEFAULT 0");
+  db.exec("ALTER TABLE conversations ADD COLUMN group_name TEXT DEFAULT NULL");
+  db.exec("ALTER TABLE conversations ADD COLUMN group_admin TEXT DEFAULT NULL");
+  console.log('📦 Migration: added group columns');
+}
+
+
 const onlineUsers = new Map();
+// Active calls tracking: conversationId -> { callId, callerId, callType, participants }
+const activeCalls = new Map();
 
 app.prepare().then(() => {
   const httpServer = createServer((req, res) => {
@@ -98,6 +147,11 @@ app.prepare().then(() => {
   global.__io = io;
   global.__db = db;
   global.__onlineUsers = onlineUsers;
+
+  // Helper to get all socket IDs for a user
+  function getUserSockets(userId) {
+    return onlineUsers.get(userId) || new Set();
+  }
 
   // ---- Socket Events ----
   io.on('connection', (socket) => {
@@ -127,13 +181,17 @@ app.prepare().then(() => {
     }
     socket.emit('users:online', onlineList);
 
-    // Join conversation rooms
+    // Join conversation rooms (1-on-1 AND groups)
     try {
-      const conversations = db.prepare(
-        'SELECT id FROM conversations WHERE participant_1 = ? OR participant_2 = ?'
+      const directConvs = db.prepare(
+        'SELECT id FROM conversations WHERE (participant_1 = ? OR participant_2 = ?) AND is_group = 0'
       ).all(userId, userId);
       
-      for (const conv of conversations) {
+      const groupConvs = db.prepare(
+        'SELECT conversation_id as id FROM group_members WHERE user_id = ?'
+      ).all(userId);
+
+      for (const conv of [...directConvs, ...groupConvs]) {
         socket.join(`conv:${conv.id}`);
       }
     } catch (err) {
@@ -153,6 +211,7 @@ app.prepare().then(() => {
           id,
           conversation_id: conversationId,
           sender_id: userId,
+          sender_username: username,
           encrypted_content: encryptedContent,
           iv,
           timestamp: Math.floor(Date.now() / 1000),
@@ -183,13 +242,15 @@ app.prepare().then(() => {
     // ---- Read receipts ----
     socket.on('messages:read', ({ conversationId }) => {
       try {
-        db.prepare(
+        const result = db.prepare(
           'UPDATE messages SET is_read = 1 WHERE conversation_id = ? AND sender_id != ? AND is_read = 0'
         ).run(conversationId, userId);
 
-        socket.to(`conv:${conversationId}`).emit('messages:read', { 
-          conversationId, readBy: userId 
-        });
+        if (result.changes > 0) {
+          socket.to(`conv:${conversationId}`).emit('messages:read', { 
+            conversationId, readBy: userId, readAt: Math.floor(Date.now() / 1000) 
+          });
+        }
       } catch (err) {
         console.error('Error marking messages as read:', err);
       }
@@ -198,6 +259,179 @@ app.prepare().then(() => {
     // ---- Join new conversation room ----
     socket.on('conversation:join', ({ conversationId }) => {
       socket.join(`conv:${conversationId}`);
+    });
+
+    // ========================================
+    // ---- WebRTC CALL SIGNALING (Phase 2) ----
+    // ========================================
+
+    // Initiate a call
+    socket.on('call:initiate', ({ conversationId, callType, callId, targetUserId }) => {
+      console.log(`📞 Call initiated: ${username} -> ${targetUserId} (${callType})`);
+
+      // Store active call
+      activeCalls.set(conversationId, {
+        callId,
+        callerId: userId,
+        callerUsername: username,
+        callType,
+        startTime: Date.now(),
+      });
+
+      // Log to DB
+      try {
+        db.prepare(
+          'INSERT INTO call_logs (id, conversation_id, caller_id, call_type, status) VALUES (?, ?, ?, ?, ?)'
+        ).run(callId, conversationId, userId, callType, 'ringing');
+      } catch (err) {
+        console.error('Error logging call:', err);
+      }
+
+      // Notify the target user on all their sockets
+      const targetSockets = getUserSockets(targetUserId);
+      for (const sid of targetSockets) {
+        io.to(sid).emit('call:incoming', {
+          callId,
+          conversationId,
+          callType,
+          callerId: userId,
+          callerUsername: username,
+        });
+      }
+    });
+
+    // Accept a call
+    socket.on('call:accept', ({ conversationId, callId }) => {
+      console.log(`📞 Call accepted: ${username}`);
+
+      const call = activeCalls.get(conversationId);
+      if (call) {
+        // Update DB
+        try {
+          db.prepare('UPDATE call_logs SET status = ? WHERE id = ?').run('active', callId);
+        } catch (err) {
+          console.error('Error updating call log:', err);
+        }
+
+        // Notify the caller
+        const callerSockets = getUserSockets(call.callerId);
+        for (const sid of callerSockets) {
+          io.to(sid).emit('call:accepted', {
+            callId,
+            conversationId,
+            acceptedBy: userId,
+            acceptedByUsername: username,
+          });
+        }
+      }
+    });
+
+    // Reject a call
+    socket.on('call:reject', ({ conversationId, callId }) => {
+      console.log(`📞 Call rejected: ${username}`);
+
+      const call = activeCalls.get(conversationId);
+      if (call) {
+        activeCalls.delete(conversationId);
+
+        try {
+          db.prepare('UPDATE call_logs SET status = ?, ended_at = unixepoch() WHERE id = ?')
+            .run('rejected', callId);
+        } catch (err) {
+          console.error('Error updating call log:', err);
+        }
+
+        const callerSockets = getUserSockets(call.callerId);
+        for (const sid of callerSockets) {
+          io.to(sid).emit('call:rejected', { callId, conversationId, rejectedBy: userId });
+        }
+      }
+    });
+
+    // End a call
+    socket.on('call:end', ({ conversationId, callId }) => {
+      console.log(`📞 Call ended: ${username}`);
+
+      activeCalls.delete(conversationId);
+
+      try {
+        db.prepare('UPDATE call_logs SET status = ?, ended_at = unixepoch() WHERE id = ?')
+          .run('ended', callId);
+      } catch (err) {
+        console.error('Error updating call log:', err);
+      }
+
+      // Notify everyone in the conversation
+      socket.to(`conv:${conversationId}`).emit('call:ended', {
+        callId,
+        conversationId,
+        endedBy: userId,
+      });
+    });
+
+    // WebRTC signaling: relay offer
+    socket.on('webrtc:offer', ({ conversationId, offer, targetUserId }) => {
+      const targetSockets = getUserSockets(targetUserId);
+      for (const sid of targetSockets) {
+        io.to(sid).emit('webrtc:offer', {
+          conversationId,
+          offer,
+          fromUserId: userId,
+        });
+      }
+    });
+
+    // WebRTC signaling: relay answer
+    socket.on('webrtc:answer', ({ conversationId, answer, targetUserId }) => {
+      const targetSockets = getUserSockets(targetUserId);
+      for (const sid of targetSockets) {
+        io.to(sid).emit('webrtc:answer', {
+          conversationId,
+          answer,
+          fromUserId: userId,
+        });
+      }
+    });
+
+    // WebRTC signaling: relay ICE candidate
+    socket.on('webrtc:ice-candidate', ({ conversationId, candidate, targetUserId }) => {
+      const targetSockets = getUserSockets(targetUserId);
+      for (const sid of targetSockets) {
+        io.to(sid).emit('webrtc:ice-candidate', {
+          conversationId,
+          candidate,
+          fromUserId: userId,
+        });
+      }
+    });
+
+    // ========================================
+    // ---- GROUP CHAT (Phase 2) ----
+    // ========================================
+
+    socket.on('group:create', ({ conversationId }) => {
+      socket.join(`conv:${conversationId}`);
+    });
+
+    socket.on('group:member-joined', ({ conversationId, memberId }) => {
+      // Notify all members of the group
+      io.to(`conv:${conversationId}`).emit('group:member-joined', {
+        conversationId,
+        memberId,
+      });
+
+      // Make the new member join the room (if online)
+      const memberSockets = getUserSockets(memberId);
+      for (const sid of memberSockets) {
+        io.sockets.sockets.get(sid)?.join(`conv:${conversationId}`);
+      }
+    });
+
+    socket.on('group:member-left', ({ conversationId, memberId }) => {
+      io.to(`conv:${conversationId}`).emit('group:member-left', {
+        conversationId,
+        memberId,
+      });
     });
 
     // ---- Disconnect ----
@@ -209,6 +443,19 @@ app.prepare().then(() => {
         if (onlineUsers.get(userId).size === 0) {
           onlineUsers.delete(userId);
           io.emit('user:offline', { userId });
+
+          // End any active calls this user was in
+          for (const [convId, call] of activeCalls) {
+            if (call.callerId === userId) {
+              activeCalls.delete(convId);
+              io.to(`conv:${convId}`).emit('call:ended', {
+                callId: call.callId,
+                conversationId: convId,
+                endedBy: userId,
+                reason: 'disconnected',
+              });
+            }
+          }
         }
       }
     });
@@ -235,6 +482,8 @@ app.prepare().then(() => {
   httpServer.listen(port, hostname, () => {
     console.log(`\n🔒 CipherChat running at http://${hostname}:${port}`);
     console.log(`   End-to-end encrypted messaging`);
+    console.log(`   Audio/Video calling (WebRTC)`);
+    console.log(`   Group chat support`);
     console.log(`   Server is a blind relay — zero knowledge\n`);
   });
 });

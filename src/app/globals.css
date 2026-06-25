@@ -1463,6 +1463,7 @@ img {
     display: flex;
   }
 
+
   .chat-header-back {
     display: flex;
   }
@@ -1473,5 +1474,557 @@ img {
 
   .chat-empty-features {
     flex-direction: column;
+  }
+}
+
+/* ============================================
+   Phase 2: Enhanced Read Receipts
+   ============================================ */
+
+.message-status {
+  font-size: 12px;
+  color: var(--text-muted);
+  letter-spacing: -1px;
+  transition: color 0.4s ease;
+}
+
+.message-status.read {
+  color: var(--accent-cyan);
+  animation: readReceipt 0.5s ease;
+}
+
+@keyframes readReceipt {
+  0% { transform: scale(1); color: var(--text-muted); }
+  50% { transform: scale(1.3); color: var(--accent-cyan); }
+  100% { transform: scale(1); color: var(--accent-cyan); }
+}
+
+/* Group message sender name */
+.message-sender-name {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  letter-spacing: 0.02em;
+}
+
+/* ============================================
+   Phase 2: Call Screen Overlay
+   ============================================ */
+
+.call-screen-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 10, 19, 0.97);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(20px);
+  animation: fadeIn 0.3s ease;
+}
+
+.call-screen {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+/* Audio call display */
+.call-audio-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.call-avatar-container {
+  position: relative;
+  width: 140px;
+  height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.call-avatar-container.pulsing .call-pulse-ring {
+  animation: callPulse 2s ease-in-out infinite;
+}
+
+.call-pulse-ring {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 2px solid var(--accent-cyan);
+  opacity: 0;
+}
+
+.call-pulse-ring.delay-1 {
+  animation-delay: 0.7s;
+}
+
+.call-avatar-large {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-green));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--bg-primary);
+  z-index: 1;
+}
+
+@keyframes callPulse {
+  0% { transform: scale(0.85); opacity: 0.6; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
+.call-peer-name {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.call-status-text {
+  font-size: 16px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.call-encryption-badge {
+  font-size: 13px;
+  color: var(--accent-green);
+  font-family: 'JetBrains Mono', monospace;
+  padding: 6px 14px;
+  border: 1px solid var(--accent-green-dim);
+  border-radius: 20px;
+  background: var(--accent-green-glow);
+}
+
+/* Video call */
+.call-remote-video {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+}
+
+.remote-video-element {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.call-connecting-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  background: rgba(6, 10, 19, 0.85);
+}
+
+.call-local-video {
+  position: absolute;
+  bottom: 120px;
+  right: 24px;
+  width: 180px;
+  height: 240px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  z-index: 10;
+}
+
+.call-local-video.camera-off {
+  background: var(--bg-tertiary);
+}
+
+.local-video-element {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1); /* Mirror */
+}
+
+.camera-off-indicator {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.call-info-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(to bottom, rgba(6, 10, 19, 0.8), transparent);
+  z-index: 5;
+}
+
+.call-peer-name-small {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.call-timer {
+  font-size: 14px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.call-encryption-badge-small {
+  font-size: 12px;
+  color: var(--accent-green);
+  font-family: 'JetBrains Mono', monospace;
+  padding: 4px 10px;
+  border: 1px solid var(--accent-green-dim);
+  border-radius: 12px;
+  background: var(--accent-green-glow);
+}
+
+/* Call controls */
+.call-controls {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  background: linear-gradient(to top, rgba(6, 10, 19, 0.9), transparent);
+  z-index: 10;
+}
+
+.call-control-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.call-control-btn:hover {
+  transform: scale(1.1);
+}
+
+.call-control-icon {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  transition: all 0.2s ease;
+}
+
+.call-control-btn.active .call-control-icon {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.call-control-btn.end-call .call-control-icon {
+  background: var(--accent-red);
+  border-color: var(--accent-red);
+  transform: rotate(135deg);
+}
+
+.call-control-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* Call buttons in chat header */
+.call-btn {
+  font-size: 18px !important;
+  width: 36px !important;
+  height: 36px !important;
+  border-radius: 50% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: all 0.2s ease !important;
+}
+
+.call-btn:hover {
+  background: var(--accent-green-glow) !important;
+  transform: scale(1.1);
+}
+
+/* ============================================
+   Phase 2: Incoming Call Overlay
+   ============================================ */
+
+.incoming-call-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 10, 19, 0.9);
+  backdrop-filter: blur(24px);
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.3s ease;
+}
+
+.incoming-call-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  padding: 48px;
+}
+
+.incoming-call-type {
+  font-size: 15px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.incoming-call-avatar-container {
+  position: relative;
+  width: 160px;
+  height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.incoming-pulse-ring {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 2px solid var(--accent-green);
+  animation: callPulse 2s ease-in-out infinite;
+}
+
+.incoming-pulse-ring.delay-1 {
+  animation-delay: 0.5s;
+}
+
+.incoming-pulse-ring.delay-2 {
+  animation-delay: 1s;
+}
+
+.incoming-call-avatar {
+  width: 130px;
+  height: 130px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-green), var(--accent-cyan));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40px;
+  font-weight: 700;
+  color: var(--bg-primary);
+  z-index: 1;
+  box-shadow: 0 0 60px rgba(16, 185, 129, 0.3);
+}
+
+.incoming-call-name {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.incoming-call-encryption {
+  font-size: 13px;
+  color: var(--accent-green);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.incoming-call-actions {
+  display: flex;
+  gap: 40px;
+  margin-top: 24px;
+}
+
+.incoming-call-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  transition: transform 0.15s ease;
+}
+
+.incoming-call-btn:hover {
+  transform: scale(1.1);
+}
+
+.incoming-call-btn-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  transition: all 0.2s ease;
+}
+
+.incoming-call-btn.accept .incoming-call-btn-icon {
+  background: var(--accent-green);
+  box-shadow: 0 0 30px rgba(16, 185, 129, 0.4);
+}
+
+.incoming-call-btn.reject .incoming-call-btn-icon {
+  background: var(--accent-red);
+  box-shadow: 0 0 30px rgba(239, 68, 68, 0.4);
+}
+
+/* ============================================
+   Phase 2: Group Chat Styles
+   ============================================ */
+
+.group-name-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: var(--space-md);
+}
+
+.group-avatar-preview {
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-green));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--bg-primary);
+}
+
+.selected-members {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: var(--space-sm) 0;
+}
+
+.selected-member-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--accent-cyan-glow);
+  border: 1px solid rgba(0, 229, 255, 0.2);
+  border-radius: 20px;
+  font-size: 13px;
+  color: var(--accent-cyan);
+  font-weight: 500;
+  animation: chipIn 0.2s ease;
+}
+
+@keyframes chipIn {
+  from { transform: scale(0.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.chip-remove {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 229, 255, 0.15);
+  color: var(--accent-cyan);
+  font-size: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease;
+  padding: 0;
+}
+
+.chip-remove:hover {
+  background: rgba(0, 229, 255, 0.3);
+}
+
+/* ============================================
+   Phase 2: Call Screen Responsive
+   ============================================ */
+
+@media (max-width: 768px) {
+  .call-local-video {
+    width: 120px;
+    height: 160px;
+    bottom: 140px;
+    right: 16px;
+  }
+
+  .call-controls {
+    gap: 16px;
+    padding: 24px 16px;
+  }
+
+  .call-control-icon {
+    width: 52px;
+    height: 52px;
+    font-size: 20px;
+  }
+
+  .call-peer-name {
+    font-size: 22px;
+  }
+
+  .incoming-call-card {
+    padding: 32px;
+  }
+
+  .incoming-call-avatar {
+    width: 110px;
+    height: 110px;
+    font-size: 32px;
+  }
+
+  .incoming-call-name {
+    font-size: 24px;
   }
 }

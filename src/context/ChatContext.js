@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * CipherChat — Chat Context
- * Global state management for conversations, messages, and online status
+ * CipherChat — Chat Context (Phase 2)
+ * Global state management for conversations, messages, calls, groups, and online status
  */
 
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
@@ -45,6 +45,18 @@ export function ChatProvider({ children }) {
   const [onlineUsers, setOnlineUsers] = useState(new Set());
   const [typingUsers, setTypingUsers] = useState({}); // conversationId -> { userId, username }
 
+  // Call state (Phase 2)
+  const [callState, setCallState] = useState(null); // null | 'ringing' | 'incoming' | 'active'
+  const [callType, setCallType] = useState(null); // 'audio' | 'video'
+  const [callPeer, setCallPeer] = useState(null); // { userId, username }
+  const [callConversationId, setCallConversationId] = useState(null);
+  const [callId, setCallId] = useState(null);
+  const [callDuration, setCallDuration] = useState(0);
+  const localStreamRef = useRef(null);
+  const remoteStreamRef = useRef(null);
+  const peerConnectionRef = useRef(null);
+  const callTimerRef = useRef(null);
+
   // Crypto state
   const privateKeyRef = useRef(null);
   const sessionKeysRef = useRef(new Map()); // conversationId -> CryptoKey
@@ -55,10 +67,12 @@ export function ChatProvider({ children }) {
   const register = useCallback(async (username, password) => {
     setAuthError('');
     try {
-      // Generate key pair BEFORE registration
       const keyPair = await generateKeyPair();
       const publicKeyJwk = await exportPublicKey(keyPair.publicKey);
       const privateKeyJwk = await exportPrivateKey(keyPair.privateKey);
+
+      // Wrap private key with passphrase (for cross-device recovery)
+      const wrappedKey = await wrapPrivateKey(privateKeyJwk, password);
 
       const res = await fetch('/api/auth', {
         method: 'POST',
@@ -68,28 +82,22 @@ export function ChatProvider({ children }) {
           username,
           password,
           publicKey: publicKeyJwk,
+          wrappedPrivateKey: wrappedKey,
         }),
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      // Store wrapped private key locally
-      const wrappedKey = await wrapPrivateKey(privateKeyJwk, password);
       await storeWrappedPrivateKey(data.user.id, wrappedKey);
-
-      // Keep private key in memory
       privateKeyRef.current = keyPair.privateKey;
       passphraseRef.current = password;
 
-      // Save session
       localStorage.setItem('cipherchat_token', data.token);
       localStorage.setItem('cipherchat_user', JSON.stringify(data.user));
 
       setUser(data.user);
       setToken(data.token);
-
-      // Connect socket
       initSocket(data.user.id, data.user.username);
 
       return true;
@@ -111,22 +119,35 @@ export function ChatProvider({ children }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      // Unwrap private key from local storage
-      const wrappedKey = await getWrappedPrivateKey(data.user.id);
-      if (wrappedKey) {
+      // Try to unwrap private key — check local first, then server
+      let keyRestored = false;
+
+      // 1. Try local IndexedDB (fastest)
+      const localWrappedKey = await getWrappedPrivateKey(data.user.id);
+      if (localWrappedKey) {
         try {
-          privateKeyRef.current = await unwrapPrivateKey(wrappedKey, password);
+          privateKeyRef.current = await unwrapPrivateKey(localWrappedKey, password);
+          keyRestored = true;
         } catch {
-          // Key might be from a different device — regenerate
-          console.warn('Could not unwrap private key, regenerating...');
-          const keyPair = await generateKeyPair();
-          const privateKeyJwk = await exportPrivateKey(keyPair.privateKey);
-          const newWrapped = await wrapPrivateKey(privateKeyJwk, password);
-          await storeWrappedPrivateKey(data.user.id, newWrapped);
-          privateKeyRef.current = keyPair.privateKey;
+          console.warn('Local key unwrap failed, trying server backup...');
         }
-      } else {
-        // No local key — regenerate (new device)
+      }
+
+      // 2. Try server backup (cross-device recovery)
+      if (!keyRestored && data.wrappedPrivateKey) {
+        try {
+          privateKeyRef.current = await unwrapPrivateKey(data.wrappedPrivateKey, password);
+          await storeWrappedPrivateKey(data.user.id, data.wrappedPrivateKey);
+          keyRestored = true;
+          console.log('🔑 Private key recovered from server backup');
+        } catch {
+          console.warn('Server key unwrap failed');
+        }
+      }
+
+      // 3. Last resort — regenerate
+      if (!keyRestored) {
+        console.warn('⚠️ No recoverable key found — generating new key pair');
         const keyPair = await generateKeyPair();
         const privateKeyJwk = await exportPrivateKey(keyPair.privateKey);
         const newWrapped = await wrapPrivateKey(privateKeyJwk, password);
@@ -135,13 +156,11 @@ export function ChatProvider({ children }) {
       }
 
       passphraseRef.current = password;
-
       localStorage.setItem('cipherchat_token', data.token);
       localStorage.setItem('cipherchat_user', JSON.stringify(data.user));
 
       setUser(data.user);
       setToken(data.token);
-
       initSocket(data.user.id, data.user.username);
 
       return true;
@@ -152,6 +171,7 @@ export function ChatProvider({ children }) {
   }, []);
 
   const logout = useCallback(async () => {
+    if (callState) endCallCleanup();
     disconnectSocket();
     localStorage.removeItem('cipherchat_token');
     localStorage.removeItem('cipherchat_user');
@@ -165,24 +185,22 @@ export function ChatProvider({ children }) {
     setMessages([]);
     setOnlineUsers(new Set());
     setTypingUsers({});
-  }, []);
+    setCallState(null);
+  }, [callState]);
 
   // ---- Crypto Functions ----
 
   const getSessionKey = useCallback(async (conversationId, otherPublicKeyJwk) => {
-    // Check memory cache
     if (sessionKeysRef.current.has(conversationId)) {
       return sessionKeysRef.current.get(conversationId);
     }
 
-    // Check IndexedDB cache
     const cached = await getCachedSessionKey(conversationId);
     if (cached) {
       sessionKeysRef.current.set(conversationId, cached);
       return cached;
     }
 
-    // Derive new session key
     if (!privateKeyRef.current || !otherPublicKeyJwk) {
       throw new Error('Missing keys for session key derivation');
     }
@@ -190,7 +208,6 @@ export function ChatProvider({ children }) {
     const otherPublicKey = await importPublicKey(otherPublicKeyJwk);
     const sharedKey = await deriveSharedKey(privateKeyRef.current, otherPublicKey);
 
-    // Cache it
     sessionKeysRef.current.set(conversationId, sharedKey);
     await cacheSessionKey(conversationId, sharedKey);
 
@@ -256,7 +273,6 @@ export function ChatProvider({ children }) {
       });
       const data = await res.json();
       if (res.ok) {
-        // Join socket room
         const socket = getSocket();
         if (socket) {
           socket.emit('conversation:join', { conversationId: data.id });
@@ -286,12 +302,10 @@ export function ChatProvider({ children }) {
     setActiveConversation(conversation);
     if (conversation) {
       await loadMessages(conversation.id);
-      // Mark as read
       const socket = getSocket();
       if (socket) {
         socket.emit('messages:read', { conversationId: conversation.id });
       }
-      // Update local unread count
       setConversations(prev =>
         prev.map(c =>
           c.id === conversation.id ? { ...c, unread_count: 0 } : c
@@ -302,6 +316,36 @@ export function ChatProvider({ children }) {
     }
   }, [loadMessages]);
 
+  // ---- Group Functions (Phase 2) ----
+
+  const createGroup = useCallback(async (groupName, memberIds) => {
+    if (!user) return null;
+    try {
+      const res = await fetch('/api/groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create',
+          userId: user.id,
+          name: groupName,
+          memberIds,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        const socket = getSocket();
+        if (socket) {
+          socket.emit('group:create', { conversationId: data.id });
+        }
+        await loadConversations();
+        return data;
+      }
+    } catch (err) {
+      console.error('Error creating group:', err);
+    }
+    return null;
+  }, [user, loadConversations]);
+
   // ---- Typing ----
 
   const sendTyping = useCallback((conversationId, isTyping) => {
@@ -311,6 +355,165 @@ export function ChatProvider({ children }) {
     }
   }, []);
 
+  // ---- Call Functions (Phase 2) ----
+
+  const endCallCleanup = useCallback(() => {
+    if (callTimerRef.current) {
+      clearInterval(callTimerRef.current);
+      callTimerRef.current = null;
+    }
+    if (localStreamRef.current) {
+      for (const track of localStreamRef.current.getTracks()) {
+        track.stop();
+      }
+      localStreamRef.current = null;
+    }
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
+    }
+    remoteStreamRef.current = null;
+    setCallState(null);
+    setCallType(null);
+    setCallPeer(null);
+    setCallConversationId(null);
+    setCallId(null);
+    setCallDuration(0);
+  }, []);
+
+  const initiateCall = useCallback(async (conversationId, type, targetUserId, targetUsername) => {
+    if (callState) return; // Already in a call
+
+    const newCallId = crypto.randomUUID();
+    setCallState('ringing');
+    setCallType(type);
+    setCallPeer({ userId: targetUserId, username: targetUsername });
+    setCallConversationId(conversationId);
+    setCallId(newCallId);
+
+    try {
+      // Import WebRTC dynamically (client-side only)
+      const webrtc = await import('@/lib/webrtc');
+
+      const onIceCandidate = (candidate) => {
+        const socket = getSocket();
+        if (socket) {
+          socket.emit('webrtc:ice-candidate', {
+            conversationId,
+            candidate,
+            targetUserId,
+          });
+        }
+      };
+
+      const onTrack = (stream) => {
+        remoteStreamRef.current = stream;
+      };
+
+      const onConnectionStateChange = (state) => {
+        if (state === 'connected') {
+          setCallState('active');
+          callTimerRef.current = setInterval(() => {
+            setCallDuration(prev => prev + 1);
+          }, 1000);
+        } else if (state === 'disconnected' || state === 'failed') {
+          endCallCleanup();
+        }
+      };
+
+      const { offer, localStream } = await webrtc.startCall(type, onIceCandidate, onTrack, onConnectionStateChange);
+      localStreamRef.current = localStream;
+      peerConnectionRef.current = webrtc.createPeerConnection(onIceCandidate, onTrack, onConnectionStateChange);
+
+      // Send call initiation + offer
+      const socket = getSocket();
+      if (socket) {
+        socket.emit('call:initiate', {
+          conversationId,
+          callType: type,
+          callId: newCallId,
+          targetUserId,
+        });
+
+        socket.emit('webrtc:offer', {
+          conversationId,
+          offer,
+          targetUserId,
+        });
+      }
+    } catch (err) {
+      console.error('Call initiation error:', err);
+      alert(err.message || 'Could not start call');
+      endCallCleanup();
+    }
+  }, [callState, endCallCleanup]);
+
+  const acceptCall = useCallback(async () => {
+    if (callState !== 'incoming') return;
+
+    setCallState('active');
+
+    const socket = getSocket();
+    if (socket) {
+      socket.emit('call:accept', {
+        conversationId: callConversationId,
+        callId,
+      });
+    }
+
+    // Start call duration timer
+    callTimerRef.current = setInterval(() => {
+      setCallDuration(prev => prev + 1);
+    }, 1000);
+  }, [callState, callConversationId, callId]);
+
+  const rejectCall = useCallback(() => {
+    if (callState !== 'incoming') return;
+
+    const socket = getSocket();
+    if (socket) {
+      socket.emit('call:reject', {
+        conversationId: callConversationId,
+        callId,
+      });
+    }
+
+    endCallCleanup();
+  }, [callState, callConversationId, callId, endCallCleanup]);
+
+  const endCall = useCallback(() => {
+    const socket = getSocket();
+    if (socket && callConversationId) {
+      socket.emit('call:end', {
+        conversationId: callConversationId,
+        callId,
+      });
+    }
+    endCallCleanup();
+  }, [callConversationId, callId, endCallCleanup]);
+
+  const toggleMuteCall = useCallback(() => {
+    if (localStreamRef.current) {
+      const audioTrack = localStreamRef.current.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = !audioTrack.enabled;
+        return !audioTrack.enabled; // true = muted
+      }
+    }
+    return false;
+  }, []);
+
+  const toggleCameraCall = useCallback(() => {
+    if (localStreamRef.current) {
+      const videoTrack = localStreamRef.current.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.enabled = !videoTrack.enabled;
+        return !videoTrack.enabled; // true = camera off
+      }
+    }
+    return false;
+  }, []);
+
   // ---- Socket Event Handlers ----
 
   useEffect(() => {
@@ -318,10 +521,8 @@ export function ChatProvider({ children }) {
     if (!socket || !user) return;
 
     const handleNewMessage = (message) => {
-      // Add to messages if in active conversation
       setMessages(prev => {
         if (prev.length > 0 && prev[0]?.conversation_id === message.conversation_id) {
-          // Avoid duplicates
           if (prev.find(m => m.id === message.id)) return prev;
           return [...prev, message];
         }
@@ -331,7 +532,6 @@ export function ChatProvider({ children }) {
         return prev;
       });
 
-      // Update conversation list
       setConversations(prev =>
         prev.map(c => {
           if (c.id === message.conversation_id) {
@@ -340,6 +540,7 @@ export function ChatProvider({ children }) {
               last_message_content: message.encrypted_content,
               last_message_iv: message.iv,
               last_message_sender: message.sender_id,
+              last_message_sender_name: message.sender_username,
               last_message_time: message.timestamp,
               unread_count: activeConversation?.id === message.conversation_id
                 ? 0
@@ -350,7 +551,6 @@ export function ChatProvider({ children }) {
         })
       );
 
-      // Mark as read if in active conversation
       if (activeConversation?.id === message.conversation_id && message.sender_id !== user.id) {
         socket.emit('messages:read', { conversationId: message.conversation_id });
       }
@@ -388,16 +588,17 @@ export function ChatProvider({ children }) {
       }
     };
 
-    const handleMessagesRead = ({ conversationId }) => {
+    const handleMessagesRead = ({ conversationId, readAt }) => {
       setMessages(prev =>
         prev.map(m =>
-          m.conversation_id === conversationId ? { ...m, is_read: 1 } : m
+          m.conversation_id === conversationId && m.sender_id === user.id
+            ? { ...m, is_read: 1, read_at: readAt }
+            : m
         )
       );
     };
 
     const handleExpired = () => {
-      // Reload messages for active conversation
       if (activeConversation) {
         loadMessages(activeConversation.id);
       }
@@ -411,6 +612,111 @@ export function ChatProvider({ children }) {
       }
     };
 
+    // ---- Call event handlers (Phase 2) ----
+
+    const handleIncomingCall = ({ callId: inCallId, conversationId, callType: inCallType, callerId, callerUsername }) => {
+      if (callState) return; // Already in a call
+      setCallState('incoming');
+      setCallType(inCallType);
+      setCallPeer({ userId: callerId, username: callerUsername });
+      setCallConversationId(conversationId);
+      setCallId(inCallId);
+    };
+
+    const handleCallAccepted = async ({ conversationId }) => {
+      setCallState('active');
+      // Timer starts when WebRTC connects
+    };
+
+    const handleCallRejected = () => {
+      endCallCleanup();
+    };
+
+    const handleCallEnded = () => {
+      endCallCleanup();
+    };
+
+    const handleWebRTCOffer = async ({ conversationId, offer, fromUserId }) => {
+      try {
+        const webrtc = await import('@/lib/webrtc');
+        
+        const onIceCandidate = (candidate) => {
+          socket.emit('webrtc:ice-candidate', {
+            conversationId,
+            candidate,
+            targetUserId: fromUserId,
+          });
+        };
+
+        const onTrack = (stream) => {
+          remoteStreamRef.current = stream;
+        };
+
+        const onConnectionStateChange = (state) => {
+          if (state === 'connected') {
+            setCallState('active');
+            if (!callTimerRef.current) {
+              callTimerRef.current = setInterval(() => {
+                setCallDuration(prev => prev + 1);
+              }, 1000);
+            }
+          } else if (state === 'disconnected' || state === 'failed') {
+            endCallCleanup();
+          }
+        };
+
+        const { answer, localStream } = await webrtc.answerCall(
+          offer,
+          callType || 'audio',
+          onIceCandidate,
+          onTrack,
+          onConnectionStateChange
+        );
+
+        localStreamRef.current = localStream;
+
+        socket.emit('webrtc:answer', {
+          conversationId,
+          answer,
+          targetUserId: fromUserId,
+        });
+      } catch (err) {
+        console.error('Error handling WebRTC offer:', err);
+      }
+    };
+
+    const handleWebRTCAnswer = async ({ answer }) => {
+      try {
+        const webrtc = await import('@/lib/webrtc');
+        await webrtc.handleAnswer(answer);
+      } catch (err) {
+        console.error('Error handling WebRTC answer:', err);
+      }
+    };
+
+    const handleWebRTCIceCandidate = async ({ candidate }) => {
+      try {
+        const webrtc = await import('@/lib/webrtc');
+        await webrtc.handleIceCandidate(candidate);
+      } catch (err) {
+        console.error('Error handling ICE candidate:', err);
+      }
+    };
+
+    // Group events
+    const handleGroupCreated = () => {
+      loadConversations();
+    };
+
+    const handleGroupMemberJoined = () => {
+      loadConversations();
+    };
+
+    const handleGroupMemberLeft = () => {
+      loadConversations();
+    };
+
+    // Register all event handlers
     socket.on('message:new', handleNewMessage);
     socket.on('user:online', handleOnline);
     socket.on('user:offline', handleOffline);
@@ -420,6 +726,20 @@ export function ChatProvider({ children }) {
     socket.on('messages:read', handleMessagesRead);
     socket.on('messages:expired', handleExpired);
     socket.on('conversation:new', handleNewConversation);
+
+    // Call events
+    socket.on('call:incoming', handleIncomingCall);
+    socket.on('call:accepted', handleCallAccepted);
+    socket.on('call:rejected', handleCallRejected);
+    socket.on('call:ended', handleCallEnded);
+    socket.on('webrtc:offer', handleWebRTCOffer);
+    socket.on('webrtc:answer', handleWebRTCAnswer);
+    socket.on('webrtc:ice-candidate', handleWebRTCIceCandidate);
+
+    // Group events
+    socket.on('group:created', handleGroupCreated);
+    socket.on('group:member-joined', handleGroupMemberJoined);
+    socket.on('group:member-left', handleGroupMemberLeft);
 
     return () => {
       socket.off('message:new', handleNewMessage);
@@ -431,8 +751,20 @@ export function ChatProvider({ children }) {
       socket.off('messages:read', handleMessagesRead);
       socket.off('messages:expired', handleExpired);
       socket.off('conversation:new', handleNewConversation);
+
+      socket.off('call:incoming', handleIncomingCall);
+      socket.off('call:accepted', handleCallAccepted);
+      socket.off('call:rejected', handleCallRejected);
+      socket.off('call:ended', handleCallEnded);
+      socket.off('webrtc:offer', handleWebRTCOffer);
+      socket.off('webrtc:answer', handleWebRTCAnswer);
+      socket.off('webrtc:ice-candidate', handleWebRTCIceCandidate);
+
+      socket.off('group:created', handleGroupCreated);
+      socket.off('group:member-joined', handleGroupMemberJoined);
+      socket.off('group:member-left', handleGroupMemberLeft);
     };
-  }, [user, activeConversation, loadMessages, loadConversations]);
+  }, [user, activeConversation, callState, callType, loadMessages, loadConversations, endCallCleanup]);
 
   // ---- Session Restore ----
 
@@ -467,36 +799,32 @@ export function ChatProvider({ children }) {
 
   const value = {
     // Auth
-    user,
-    token,
-    isLoading,
-    authError,
-    register,
-    login,
-    logout,
+    user, token, isLoading, authError,
+    register, login, logout,
 
     // Conversations
-    conversations,
-    activeConversation,
-    loadConversations,
-    startConversation,
-    selectConversation,
+    conversations, activeConversation,
+    loadConversations, startConversation, selectConversation,
 
     // Messages
-    messages,
-    loadMessages,
-    encryptAndSend,
-    decryptMessageContent,
+    messages, loadMessages,
+    encryptAndSend, decryptMessageContent,
 
     // Online / Typing
-    onlineUsers,
-    typingUsers,
-    sendTyping,
+    onlineUsers, typingUsers, sendTyping,
 
     // Crypto
-    getSessionKey,
-    privateKeyRef,
-    passphraseRef,
+    getSessionKey, privateKeyRef, passphraseRef,
+
+    // Calls (Phase 2)
+    callState, callType, callPeer, callDuration,
+    callConversationId, callId,
+    localStreamRef, remoteStreamRef,
+    initiateCall, acceptCall, rejectCall, endCall,
+    toggleMuteCall, toggleCameraCall,
+
+    // Groups (Phase 2)
+    createGroup,
   };
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;

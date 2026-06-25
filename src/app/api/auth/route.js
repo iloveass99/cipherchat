@@ -1,6 +1,9 @@
 /**
- * CipherChat — Auth API
- * POST /api/auth — { action: 'register' | 'login', username, password, publicKey? }
+ * CipherChat — Auth API (Phase 2 — Cross-device key sync)
+ * POST /api/auth — { action: 'register' | 'login', username, password, publicKey?, wrappedPrivateKey? }
+ * 
+ * The wrapped private key is encrypted with the user's passphrase (client-side)
+ * so the server stores it but CANNOT read it.
  */
 
 import { NextResponse } from 'next/server';
@@ -32,7 +35,7 @@ function getDB() {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { action, username, password, publicKey } = body;
+    const { action, username, password, publicKey, wrappedPrivateKey } = body;
 
     if (!username || !password) {
       return NextResponse.json(
@@ -78,10 +81,10 @@ export async function POST(request) {
       const passwordHash = await bcrypt.hash(password, 12);
       const userId = uuidv4();
 
-      // Create user
+      // Create user WITH wrapped private key
       db.prepare(
-        'INSERT INTO users (id, username, password_hash, public_key) VALUES (?, ?, ?, ?)'
-      ).run(userId, username, passwordHash, JSON.stringify(publicKey));
+        'INSERT INTO users (id, username, password_hash, public_key, wrapped_private_key) VALUES (?, ?, ?, ?, ?)'
+      ).run(userId, username, passwordHash, JSON.stringify(publicKey), wrappedPrivateKey ? JSON.stringify(wrappedPrivateKey) : null);
 
       // Generate JWT
       const token = jwt.sign({ userId, username }, JWT_SECRET, { expiresIn: '7d' });
@@ -119,6 +122,8 @@ export async function POST(request) {
         user: { id: user.id, username: user.username },
         token,
         publicKey: JSON.parse(user.public_key),
+        // Send back the wrapped private key so any device can unwrap it with the passphrase
+        wrappedPrivateKey: user.wrapped_private_key ? JSON.parse(user.wrapped_private_key) : null,
       });
 
     } else {
