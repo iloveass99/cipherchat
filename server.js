@@ -26,7 +26,9 @@ const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
 // ---- Database Setup ----
-const DB_PATH = path.join(__dirname, 'data', 'cipherchat.db');
+// Use DB_DIR env var for persistent storage (e.g., Railway Volume), fallback to local ./data
+const DB_DIR = process.env.DB_DIR || path.join(__dirname, 'data');
+const DB_PATH = path.join(DB_DIR, 'cipherchat.db');
 const dataDir = path.dirname(DB_PATH);
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
