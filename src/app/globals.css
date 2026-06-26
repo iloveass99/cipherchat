@@ -1786,6 +1786,63 @@ img {
   transform: scale(1.1);
 }
 
+/* Screen sharing button styles */
+.call-control-btn.screen-sharing .call-control-icon {
+  background: var(--accent-cyan);
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 20px var(--accent-cyan-glow, rgba(34, 211, 238, 0.3));
+  animation: screen-share-pulse 2s ease-in-out infinite;
+}
+
+.call-control-btn.screen-sharing .call-control-label {
+  color: var(--accent-cyan);
+  font-weight: 600;
+}
+
+@keyframes screen-share-pulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(34, 211, 238, 0.25); }
+  50% { box-shadow: 0 0 24px rgba(34, 211, 238, 0.5); }
+}
+
+/* Screen sharing floating indicator */
+.screen-share-indicator {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  background: rgba(34, 211, 238, 0.12);
+  border: 1px solid rgba(34, 211, 238, 0.3);
+  border-radius: 20px;
+  backdrop-filter: blur(12px);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent-cyan);
+  z-index: 20;
+  animation: screen-share-badge-in 0.3s ease-out;
+}
+
+.screen-share-indicator-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-red, #ef4444);
+  animation: screen-share-dot-blink 1.4s ease-in-out infinite;
+}
+
+@keyframes screen-share-badge-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-12px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@keyframes screen-share-dot-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
 /* ============================================
    Phase 2: Incoming Call Overlay
    ============================================ */

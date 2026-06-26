@@ -61,6 +61,10 @@ export function ChatProvider({ children }) {
   const callTimerRef = useRef(null);
   const pendingOfferRef = useRef(null); // Queue WebRTC offer until user accepts
 
+  // Screen sharing state
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const screenStreamRef = useRef(null);
+
   // Crypto state
   const privateKeyRef = useRef(null);
   const sessionKeysRef = useRef(new Map()); // conversationId -> CryptoKey
@@ -494,6 +498,15 @@ export function ChatProvider({ children }) {
       clearInterval(callTimerRef.current);
       callTimerRef.current = null;
     }
+    // Stop screen share if active
+    if (screenStreamRef.current) {
+      for (const track of screenStreamRef.current.getTracks()) {
+        track.stop();
+      }
+      screenStreamRef.current = null;
+    }
+    setIsScreenSharing(false);
+
     if (localStreamRef.current) {
       for (const track of localStreamRef.current.getTracks()) {
         track.stop();
@@ -696,6 +709,39 @@ export function ChatProvider({ children }) {
     }
     return false;
   }, []);
+
+  const toggleScreenShare = useCallback(async () => {
+    if (!callState || callState === 'incoming') return false;
+
+    try {
+      const webrtc = await import('@/lib/webrtc');
+
+      if (isScreenSharing) {
+        // Stop sharing
+        await webrtc.stopScreenShare(screenStreamRef.current);
+        screenStreamRef.current = null;
+        setIsScreenSharing(false);
+        return false;
+      } else {
+        // Start sharing
+        const onEnded = () => {
+          // Browser's native "Stop sharing" button clicked
+          screenStreamRef.current = null;
+          setIsScreenSharing(false);
+        };
+
+        const { screenStream } = await webrtc.startScreenShare(onEnded);
+        screenStreamRef.current = screenStream;
+        setIsScreenSharing(true);
+        return true;
+      }
+    } catch (err) {
+      console.error('Screen share error:', err);
+      setIsScreenSharing(false);
+      screenStreamRef.current = null;
+      return false;
+    }
+  }, [callState, isScreenSharing]);
 
   // ---- Socket Event Handlers ----
 
@@ -965,6 +1011,9 @@ export function ChatProvider({ children }) {
     localStreamRef, remoteStreamRef,
     initiateCall, acceptCall, rejectCall, endCall,
     toggleMuteCall, toggleCameraCall,
+
+    // Screen sharing
+    isScreenSharing, toggleScreenShare,
 
     // Groups (Phase 2)
     createGroup,

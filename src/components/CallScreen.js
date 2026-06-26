@@ -19,6 +19,8 @@ export default function CallScreen() {
     endCall,
     toggleMuteCall,
     toggleCameraCall,
+    isScreenSharing,
+    toggleScreenShare,
   } = useChat();
 
   const localVideoRef = useRef(null);
@@ -84,6 +86,10 @@ export default function CallScreen() {
     const off = toggleCameraCall();
     setIsCameraOff(off);
   }, [toggleCameraCall]);
+
+  const handleScreenShare = useCallback(async () => {
+    await toggleScreenShare();
+  }, [toggleScreenShare]);
 
   const formatDuration = (seconds) => {
     const mins = Math.floor(seconds / 60);
@@ -193,6 +199,16 @@ export default function CallScreen() {
           )}
 
           <button
+            className={`call-control-btn ${isScreenSharing ? 'screen-sharing' : ''}`}
+            onClick={handleScreenShare}
+            title={isScreenSharing ? 'Stop sharing' : 'Share screen'}
+            type="button"
+          >
+            <span className="call-control-icon">{isScreenSharing ? '🛑' : '🖥️'}</span>
+            <span className="call-control-label">{isScreenSharing ? 'Stop Share' : 'Share'}</span>
+          </button>
+
+          <button
             className="call-control-btn end-call"
             onClick={endCall}
             title="End call"
@@ -202,6 +218,14 @@ export default function CallScreen() {
             <span className="call-control-label">End</span>
           </button>
         </div>
+
+        {/* Screen sharing indicator */}
+        {isScreenSharing && (
+          <div className="screen-share-indicator">
+            <span className="screen-share-indicator-dot" />
+            <span>You are sharing your screen</span>
+          </div>
+        )}
       </div>
     </div>
   );

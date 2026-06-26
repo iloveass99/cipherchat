@@ -178,6 +178,79 @@ export function toggleCamera() {
 }
 
 /**
+ * Start screen sharing — replaces video track on the peer connection
+ * @param {function} onEnded - Callback when screen sharing stops (e.g., browser "Stop sharing")
+ * @returns {{ screenStream: MediaStream }} The captured screen stream
+ */
+export async function startScreenShare(onEnded) {
+  if (!peerConnection) {
+    throw new Error('No active peer connection');
+  }
+
+  try {
+    const screenStream = new MediaStream();
+    const displayStream = await navigator.mediaDevices.getDisplayMedia({
+      video: { cursor: 'always', width: 1920, height: 1080 },
+      audio: false,
+    });
+
+    const screenTrack = displayStream.getVideoTracks()[0];
+    screenStream.addTrack(screenTrack);
+
+    // Listen for the browser's native "Stop sharing" button
+    screenTrack.addEventListener('ended', () => {
+      if (onEnded) onEnded();
+    });
+
+    // Replace the existing video track on the peer connection sender
+    const videoSender = peerConnection.getSenders().find(
+      (s) => s.track?.kind === 'video'
+    );
+
+    if (videoSender) {
+      await videoSender.replaceTrack(screenTrack);
+    } else {
+      // Audio-only call — add the screen track as a new sender
+      peerConnection.addTrack(screenTrack, displayStream);
+    }
+
+    return { screenStream };
+  } catch (err) {
+    if (err.name === 'NotAllowedError') {
+      throw new Error('Screen sharing permission denied.');
+    }
+    throw new Error('Could not start screen sharing.');
+  }
+}
+
+/**
+ * Stop screen sharing — restores the camera video track (or removes video for audio-only)
+ * @param {MediaStream} screenStream - The screen stream to stop
+ */
+export async function stopScreenShare(screenStream) {
+  if (!peerConnection) return;
+
+  // Stop screen tracks
+  if (screenStream) {
+    for (const track of screenStream.getTracks()) {
+      track.stop();
+    }
+  }
+
+  // Restore original camera track
+  const videoSender = peerConnection.getSenders().find(
+    (s) => s.track?.kind === 'video' || (s.track === null && s._kind === 'video')
+  );
+
+  if (videoSender && localStream) {
+    const cameraTrack = localStream.getVideoTracks()[0];
+    if (cameraTrack) {
+      await videoSender.replaceTrack(cameraTrack);
+    }
+  }
+}
+
+/**
  * End call and cleanup
  */
 export function closePeerConnection() {
