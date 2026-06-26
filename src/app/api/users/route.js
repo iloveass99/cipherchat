@@ -55,9 +55,23 @@ export async function GET(request) {
       return NextResponse.json({ error: 'Missing search or userId parameter' }, { status: 400 });
     }
 
-    const users = db.prepare(
-      'SELECT id, username, public_key, display_name, avatar_url, bio FROM users WHERE username LIKE ? AND id != ? LIMIT 20'
-    ).all(`%${search}%`, currentUserId);
+    const users = db.prepare(`
+      SELECT id, username, public_key, display_name, avatar_url, bio 
+      FROM users 
+      WHERE username LIKE ? AND id != ?
+        AND id NOT IN (SELECT blocked_id FROM blocks WHERE blocker_id = ?)
+        AND id NOT IN (SELECT blocker_id FROM blocks WHERE blocked_id = ?)
+      LIMIT 20
+    `).all(`%${search}%`, currentUserId, currentUserId, currentUserId);
+
+    // Get friend statuses for these users
+    const friendStatuses = {};
+    for (const u of users) {
+      const friendship = db.prepare(
+        'SELECT status FROM friends WHERE (requester_id = ? AND recipient_id = ?) OR (requester_id = ? AND recipient_id = ?)'
+      ).get(currentUserId, u.id, u.id, currentUserId);
+      if (friendship) friendStatuses[u.id] = friendship.status;
+    }
 
     return NextResponse.json(
       users.map(u => ({
@@ -68,6 +82,7 @@ export async function GET(request) {
         bio: u.bio || null,
         publicKey: JSON.parse(u.public_key),
         online: global.__onlineUsers?.has(u.id) || false,
+        friendStatus: friendStatuses[u.id] || null,
       }))
     );
   } catch (error) {

@@ -43,6 +43,24 @@ export async function POST(request) {
     if (action === 'register') {
       const { publicKey, wrappedPrivateKey, recoveryKey, recoveryWrappedKey } = body;
 
+      // IP rate limiting: max 3 registrations per IP per 24 hours
+      const clientIp = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+        || request.headers.get('x-real-ip')
+        || 'unknown';
+
+      if (clientIp !== 'unknown') {
+        const oneDayAgo = Math.floor(Date.now() / 1000) - 86400;
+        const recentRegistrations = db.prepare(
+          'SELECT COUNT(*) as count FROM registration_log WHERE ip_address = ? AND created_at > ?'
+        ).get(clientIp, oneDayAgo);
+
+        if (recentRegistrations && recentRegistrations.count >= 3) {
+          return NextResponse.json({
+            error: 'Too many accounts created from this network. Please try again later.'
+          }, { status: 429 });
+        }
+      }
+
       if (!password || password.length < 6) {
         return NextResponse.json({ error: 'Password must be at least 6 characters' }, { status: 400 });
       }
@@ -74,6 +92,11 @@ export async function POST(request) {
         recoveryKeyHash,
         recoveryWrappedKey ? JSON.stringify(recoveryWrappedKey) : null
       );
+
+      // Log IP for rate limiting
+      if (clientIp !== 'unknown') {
+        db.prepare('INSERT INTO registration_log (ip_address) VALUES (?)').run(clientIp);
+      }
 
       const token = jwt.sign({ userId, username }, JWT_SECRET, { expiresIn: '7d' });
 

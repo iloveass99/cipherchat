@@ -16,7 +16,7 @@ export default function UserSearch({ isOpen, onClose }) {
   const searchTimeoutRef = useRef(null);
   const inputRef = useRef(null);
 
-  const { user, startConversation, selectConversation, onlineUsers } = useChat();
+  const { user, startConversation, selectConversation, onlineUsers, sendFriendRequest } = useChat();
 
   // Focus input when modal opens
   useEffect(() => {
@@ -110,7 +110,10 @@ export default function UserSearch({ isOpen, onClose }) {
                     <span className={`status-dot ${onlineUsers.has(u.id) ? 'online' : 'offline'}`} />
                   </div>
                   <div className="user-search-info">
-                    <span className="user-search-name">{u.displayName || u.username}</span>
+                    <span className="user-search-name">
+                      {u.displayName || u.username}
+                      {u.friendStatus === 'accepted' && <span className="friend-badge-inline" title="Friend"> 🤝</span>}
+                    </span>
                     {u.displayName && (
                       <span className="user-search-username">@{u.username}</span>
                     )}
@@ -118,18 +121,37 @@ export default function UserSearch({ isOpen, onClose }) {
                       <span className="user-search-bio">{u.bio.length > 50 ? u.bio.slice(0, 50) + '...' : u.bio}</span>
                     )}
                   </div>
-                  <button
-                    className="user-search-action"
-                    onClick={() => handleStartChat(u)}
-                    disabled={starting === u.id}
-                    type="button"
-                  >
-                    {starting === u.id ? (
-                      <span className="spinner" style={{ width: 14, height: 14 }} />
-                    ) : (
-                      'Message'
+                  <div className="user-search-actions">
+                    {!u.friendStatus && (
+                      <button
+                        className="user-search-friend-btn"
+                        onClick={async () => {
+                          await sendFriendRequest(u.id);
+                          // Update local state
+                          setResults(prev => prev.map(r => r.id === u.id ? { ...r, friendStatus: 'pending' } : r));
+                        }}
+                        title="Add Friend"
+                        type="button"
+                      >
+                        🤝
+                      </button>
                     )}
-                  </button>
+                    {u.friendStatus === 'pending' && (
+                      <span className="user-search-pending" title="Request pending">⏳</span>
+                    )}
+                    <button
+                      className="user-search-action"
+                      onClick={() => handleStartChat(u)}
+                      disabled={starting === u.id}
+                      type="button"
+                    >
+                      {starting === u.id ? (
+                        <span className="spinner" style={{ width: 14, height: 14 }} />
+                      ) : (
+                        'Message'
+                      )}
+                    </button>
+                  </div>
                 </div>
               ))
             ) : query.trim() ? (

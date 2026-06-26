@@ -18,6 +18,9 @@ export default function ChatSidebar({ onOpenSearch, onOpenCreateGroup, onOpenPro
     typingUsers,
     logout,
     decryptMessageContent,
+    pendingRequests,
+    acceptFriend,
+    rejectFriend,
   } = useChat();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -132,6 +135,44 @@ export default function ChatSidebar({ onOpenSearch, onOpenCreateGroup, onOpenPro
           />
         </div>
       </div>
+
+      {/* Friend Requests */}
+      {pendingRequests.length > 0 && (
+        <div className="friend-requests-section">
+          <div className="friend-requests-header">
+            <span>🤝 Friend Requests</span>
+            <span className="friend-requests-count">{pendingRequests.length}</span>
+          </div>
+          {pendingRequests.map(req => (
+            <div key={req.id} className="friend-request-item">
+              <div className="conversation-avatar" style={{ width: 32, height: 32, minWidth: 32, fontSize: 12 }}>
+                {req.avatarUrl ? (
+                  <img src={req.avatarUrl} alt="" className="avatar-img" />
+                ) : (req.username || '?').slice(0, 2).toUpperCase()}
+              </div>
+              <span className="friend-request-name">{req.displayName || req.username}</span>
+              <div className="friend-request-actions">
+                <button
+                  className="friend-accept-btn"
+                  onClick={() => acceptFriend(req.id)}
+                  title="Accept"
+                  type="button"
+                >
+                  ✓
+                </button>
+                <button
+                  className="friend-reject-btn"
+                  onClick={() => rejectFriend(req.id)}
+                  title="Reject"
+                  type="button"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Conversation list */}
       <div className="conversation-list">

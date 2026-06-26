@@ -102,6 +102,32 @@ db.exec(`
     FOREIGN KEY (caller_id) REFERENCES users(id)
   );
 
+  CREATE TABLE IF NOT EXISTS blocks (
+    blocker_id TEXT NOT NULL,
+    blocked_id TEXT NOT NULL,
+    created_at INTEGER DEFAULT (unixepoch()),
+    PRIMARY KEY (blocker_id, blocked_id),
+    FOREIGN KEY (blocker_id) REFERENCES users(id),
+    FOREIGN KEY (blocked_id) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS friends (
+    requester_id TEXT NOT NULL,
+    recipient_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at INTEGER DEFAULT (unixepoch()),
+    updated_at INTEGER DEFAULT (unixepoch()),
+    PRIMARY KEY (requester_id, recipient_id),
+    FOREIGN KEY (requester_id) REFERENCES users(id),
+    FOREIGN KEY (recipient_id) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS registration_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ip_address TEXT NOT NULL,
+    created_at INTEGER DEFAULT (unixepoch())
+  );
+
   CREATE INDEX IF NOT EXISTS idx_messages_conversation 
     ON messages(conversation_id, timestamp);
   CREATE INDEX IF NOT EXISTS idx_messages_expires 
@@ -110,6 +136,12 @@ db.exec(`
     ON conversations(participant_1, participant_2);
   CREATE INDEX IF NOT EXISTS idx_group_members_user
     ON group_members(user_id);
+  CREATE INDEX IF NOT EXISTS idx_blocks_blocked
+    ON blocks(blocked_id);
+  CREATE INDEX IF NOT EXISTS idx_friends_recipient
+    ON friends(recipient_id);
+  CREATE INDEX IF NOT EXISTS idx_registration_log_ip
+    ON registration_log(ip_address, created_at);
 `);
 
 console.log('📦 Database initialized');
@@ -238,6 +270,18 @@ app.prepare().then(() => {
       const { id, conversationId, encryptedContent, iv, expiresAt, messageType } = data;
 
       try {
+        // Check if blocked (for 1-on-1 conversations)
+        const conv = db.prepare('SELECT participant_1, participant_2, is_group FROM conversations WHERE id = ?').get(conversationId);
+        if (conv && !conv.is_group) {
+          const otherUserId = conv.participant_1 === userId ? conv.participant_2 : conv.participant_1;
+          const blocked = db.prepare(
+            'SELECT 1 FROM blocks WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?)'
+          ).get(otherUserId, userId, userId, otherUserId);
+          if (blocked) {
+            socket.emit('message:error', { id, error: 'Message could not be delivered' });
+            return;
+          }
+        }
         db.prepare(
           'INSERT INTO messages (id, conversation_id, sender_id, encrypted_content, iv, message_type, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
         ).run(id, conversationId, userId, encryptedContent, iv, messageType || 'text', expiresAt || null);
@@ -303,6 +347,15 @@ app.prepare().then(() => {
 
     // Initiate a call
     socket.on('call:initiate', ({ conversationId, callType, callId, targetUserId }) => {
+      // Check if blocked
+      const blocked = db.prepare(
+        'SELECT 1 FROM blocks WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?)'
+      ).get(targetUserId, userId, userId, targetUserId);
+      if (blocked) {
+        socket.emit('call:rejected', { callId, conversationId, rejectedBy: targetUserId, reason: 'unavailable' });
+        return;
+      }
+
       console.log(`📞 Call initiated: ${username} -> ${targetUserId} (${callType})`);
 
       // Store active call
@@ -468,6 +521,30 @@ app.prepare().then(() => {
         conversationId,
         memberId,
       });
+    });
+
+    // ========================================
+    // ---- FRIEND REQUESTS ----
+    // ========================================
+
+    socket.on('friend:request', ({ targetUserId }) => {
+      const targetSockets = getUserSockets(targetUserId);
+      for (const sid of targetSockets) {
+        io.to(sid).emit('friend:request', {
+          fromUserId: userId,
+          fromUsername: username,
+        });
+      }
+    });
+
+    socket.on('friend:accepted', ({ targetUserId }) => {
+      const targetSockets = getUserSockets(targetUserId);
+      for (const sid of targetSockets) {
+        io.to(sid).emit('friend:accepted', {
+          fromUserId: userId,
+          fromUsername: username,
+        });
+      }
     });
 
     // ---- Disconnect ----

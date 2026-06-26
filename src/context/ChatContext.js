@@ -536,6 +536,137 @@ export function ChatProvider({ children }) {
     }
   }, [user]);
 
+  // ---- Block ----
+
+  const blockUser = useCallback(async (targetUserId) => {
+    if (!user) return false;
+    try {
+      const res = await fetch('/api/block', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, targetUserId, action: 'block' }),
+      });
+      if (!res.ok) return false;
+      await loadConversations();
+      return true;
+    } catch (err) {
+      console.error('Block error:', err);
+      return false;
+    }
+  }, [user, loadConversations]);
+
+  const unblockUser = useCallback(async (targetUserId) => {
+    if (!user) return false;
+    try {
+      const res = await fetch('/api/block', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, targetUserId, action: 'unblock' }),
+      });
+      if (!res.ok) return false;
+      await loadConversations();
+      return true;
+    } catch (err) {
+      console.error('Unblock error:', err);
+      return false;
+    }
+  }, [user, loadConversations]);
+
+  // ---- Friends ----
+
+  const [friends, setFriends] = useState([]);
+  const [pendingRequests, setPendingRequests] = useState([]);
+  const [sentRequests, setSentRequests] = useState([]);
+
+  const loadFriends = useCallback(async () => {
+    if (!user) return;
+    try {
+      const res = await fetch(`/api/friends?userId=${user.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setFriends(data.friends || []);
+        setPendingRequests(data.pendingReceived || []);
+        setSentRequests(data.pendingSent || []);
+      }
+    } catch (err) {
+      console.error('Load friends error:', err);
+    }
+  }, [user]);
+
+  const sendFriendRequest = useCallback(async (targetUserId) => {
+    if (!user) return false;
+    try {
+      const res = await fetch('/api/friends', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, targetUserId, action: 'send' }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        console.error('Friend request error:', data.error);
+        return false;
+      }
+      await loadFriends();
+      return true;
+    } catch (err) {
+      console.error('Friend request error:', err);
+      return false;
+    }
+  }, [user, loadFriends]);
+
+  const acceptFriend = useCallback(async (targetUserId) => {
+    if (!user) return false;
+    try {
+      const res = await fetch('/api/friends', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, targetUserId, action: 'accept' }),
+      });
+      if (!res.ok) return false;
+      await loadFriends();
+      await loadConversations();
+      return true;
+    } catch (err) {
+      console.error('Accept friend error:', err);
+      return false;
+    }
+  }, [user, loadFriends, loadConversations]);
+
+  const rejectFriend = useCallback(async (targetUserId) => {
+    if (!user) return false;
+    try {
+      const res = await fetch('/api/friends', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, targetUserId, action: 'reject' }),
+      });
+      if (!res.ok) return false;
+      await loadFriends();
+      return true;
+    } catch (err) {
+      console.error('Reject friend error:', err);
+      return false;
+    }
+  }, [user, loadFriends]);
+
+  const removeFriend = useCallback(async (targetUserId) => {
+    if (!user) return false;
+    try {
+      const res = await fetch('/api/friends', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, targetUserId, action: 'remove' }),
+      });
+      if (!res.ok) return false;
+      await loadFriends();
+      await loadConversations();
+      return true;
+    } catch (err) {
+      console.error('Remove friend error:', err);
+      return false;
+    }
+  }, [user, loadFriends, loadConversations]);
+
   // ---- Call Functions (Phase 2) ----
 
   const endCallCleanup = useCallback(() => {
@@ -971,6 +1102,12 @@ export function ChatProvider({ children }) {
     socket.on('group:member-joined', handleGroupMemberJoined);
     socket.on('group:member-left', handleGroupMemberLeft);
 
+    // Friend events
+    const handleFriendRequest = () => loadFriends();
+    const handleFriendAccepted = () => { loadFriends(); loadConversations(); };
+    socket.on('friend:request', handleFriendRequest);
+    socket.on('friend:accepted', handleFriendAccepted);
+
     return () => {
       socket.off('message:new', handleNewMessage);
       socket.off('user:online', handleOnline);
@@ -993,6 +1130,9 @@ export function ChatProvider({ children }) {
       socket.off('group:created', handleGroupCreated);
       socket.off('group:member-joined', handleGroupMemberJoined);
       socket.off('group:member-left', handleGroupMemberLeft);
+
+      socket.off('friend:request', handleFriendRequest);
+      socket.off('friend:accepted', handleFriendAccepted);
     };
   }, [user, activeConversation, callState, callType, loadMessages, loadConversations, endCallCleanup]);
 
@@ -1050,12 +1190,13 @@ export function ChatProvider({ children }) {
     restore();
   }, []);
 
-  // Load conversations when user changes
+  // Load conversations and friends when user changes
   useEffect(() => {
     if (user) {
       loadConversations();
+      loadFriends();
     }
-  }, [user, loadConversations]);
+  }, [user, loadConversations, loadFriends]);
 
   const value = {
     // Auth
@@ -1097,6 +1238,13 @@ export function ChatProvider({ children }) {
 
     // Profile
     updateProfile,
+
+    // Block
+    blockUser, unblockUser,
+
+    // Friends
+    friends, pendingRequests, sentRequests,
+    loadFriends, sendFriendRequest, acceptFriend, rejectFriend, removeFriend,
   };
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;

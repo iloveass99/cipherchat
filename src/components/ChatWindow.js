@@ -7,6 +7,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useChat } from '@/context/ChatContext';
+import ChatHeaderMenu from '@/components/ChatHeaderMenu';
 
 export default function ChatWindow() {
   const {
@@ -373,6 +374,7 @@ export default function ChatWindow() {
                 onClick={handleAudioCall}
                 title="Audio call"
                 type="button"
+                disabled={activeConversation?.is_blocked || activeConversation?.blocked_by}
               >
                 📞
               </button>
@@ -381,14 +383,31 @@ export default function ChatWindow() {
                 onClick={handleVideoCall}
                 title="Video call"
                 type="button"
+                disabled={activeConversation?.is_blocked || activeConversation?.blocked_by}
               >
                 📹
               </button>
             </>
           )}
+          {activeConversation?.friend_status === 'accepted' && (
+            <span className="friend-badge-header" title="Friend">🤝</span>
+          )}
           <span className="e2ee-badge">🔒 E2EE</span>
+          {!isGroup && <ChatHeaderMenu conversation={activeConversation} />}
         </div>
       </div>
+
+      {/* Blocked Banner */}
+      {(activeConversation?.is_blocked || activeConversation?.blocked_by) && (
+        <div className="blocked-banner">
+          <span className="blocked-banner-icon">🚫</span>
+          <span>
+            {activeConversation?.is_blocked
+              ? 'You blocked this user. Unblock from the menu (⋮) to resume messaging.'
+              : 'You cannot message this user.'}
+          </span>
+        </div>
+      )}
 
       {/* Messages */}
       <div className="chat-messages">

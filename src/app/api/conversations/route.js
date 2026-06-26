@@ -55,10 +55,28 @@ export async function GET(request) {
       ORDER BY COALESCE(m.timestamp, c.created_at) DESC
     `).all(userId, userId, userId, userId, userId);
 
-    const parsedDirect = directConversations.map(c => ({
-      ...c,
-      other_public_key: c.other_public_key ? JSON.parse(c.other_public_key) : null,
-    }));
+    const parsedDirect = directConversations.map(c => {
+      // Check block status
+      const iBlockedThem = !!db.prepare(
+        'SELECT 1 FROM blocks WHERE blocker_id = ? AND blocked_id = ?'
+      ).get(userId, c.other_user_id);
+      const theyBlockedMe = !!db.prepare(
+        'SELECT 1 FROM blocks WHERE blocker_id = ? AND blocked_id = ?'
+      ).get(c.other_user_id, userId);
+
+      // Check friend status
+      const friendship = db.prepare(
+        'SELECT status FROM friends WHERE (requester_id = ? AND recipient_id = ?) OR (requester_id = ? AND recipient_id = ?)'
+      ).get(userId, c.other_user_id, c.other_user_id, userId);
+
+      return {
+        ...c,
+        other_public_key: c.other_public_key ? JSON.parse(c.other_public_key) : null,
+        is_blocked: iBlockedThem,
+        blocked_by: theyBlockedMe,
+        friend_status: friendship?.status || null,
+      };
+    });
 
     // ---- Group conversations ----
     const groupConversations = db.prepare(`

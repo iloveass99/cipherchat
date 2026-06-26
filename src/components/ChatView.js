@@ -37,7 +37,7 @@ export default function ChatView() {
 
         <div className="chat-main">
           <ChatWindow />
-          {activeConversation && <MessageInput />}
+          {activeConversation && !activeConversation.is_blocked && !activeConversation.blocked_by && <MessageInput />}
         </div>
       </div>
 
