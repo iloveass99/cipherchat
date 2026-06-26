@@ -2227,3 +2227,685 @@ img {
   from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* ============================================
+   Phase 3 — Emoji Picker
+   ============================================ */
+
+.emoji-picker {
+  position: absolute;
+  bottom: 110px;
+  left: 16px;
+  width: 340px;
+  max-height: 400px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+  animation: slideUp 0.2s ease;
+  overflow: hidden;
+}
+
+.emoji-search {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.emoji-search-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.emoji-search-input:focus {
+  border-color: var(--accent-cyan);
+}
+
+.emoji-categories {
+  display: flex;
+  padding: 6px 8px;
+  gap: 2px;
+  border-bottom: 1px solid var(--border-color);
+  overflow-x: auto;
+}
+
+.emoji-cat-btn {
+  padding: 4px 6px;
+  border: none;
+  background: none;
+  border-radius: var(--radius-sm);
+  font-size: 16px;
+  cursor: pointer;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+
+.emoji-cat-btn:hover {
+  background: var(--bg-hover);
+}
+
+.emoji-cat-btn.active {
+  background: rgba(6, 182, 212, 0.15);
+}
+
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+  padding: 8px;
+  overflow-y: auto;
+  max-height: 280px;
+}
+
+.emoji-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: none;
+  border-radius: var(--radius-sm);
+  font-size: 22px;
+  cursor: pointer;
+  transition: all 0.1s;
+}
+
+.emoji-item:hover {
+  background: var(--bg-hover);
+  transform: scale(1.2);
+}
+
+.emoji-empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 24px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* ============================================
+   Phase 3 — Input Action Buttons
+   ============================================ */
+
+.input-action-btn {
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: none;
+  border-radius: var(--radius-md);
+  font-size: 18px;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.input-action-btn:hover {
+  background: var(--bg-hover);
+}
+
+.input-action-btn.active {
+  background: rgba(6, 182, 212, 0.15);
+}
+
+.input-action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ============================================
+   Phase 3 — Upload Progress
+   ============================================ */
+
+.upload-progress-bar {
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(6, 182, 212, 0.08);
+  border-radius: var(--radius-sm);
+  margin-bottom: 6px;
+}
+
+.upload-progress-inner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid rgba(6, 182, 212, 0.3);
+  border-top-color: var(--accent-cyan);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.upload-progress-text {
+  font-size: 13px;
+  color: var(--accent-cyan);
+  font-weight: 500;
+}
+
+/* ============================================
+   Phase 3 — Media Messages
+   ============================================ */
+
+.message-media {
+  margin-bottom: 4px;
+}
+
+.message-image {
+  max-width: 280px;
+  max-height: 300px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: opacity 0.2s;
+  display: block;
+  object-fit: cover;
+}
+
+.message-image:hover {
+  opacity: 0.9;
+}
+
+.message-video {
+  max-width: 300px;
+  max-height: 240px;
+  border-radius: var(--radius-md);
+  display: block;
+  background: #000;
+}
+
+.message-audio-file {
+  min-width: 240px;
+}
+
+.message-audio {
+  width: 100%;
+  height: 36px;
+  border-radius: var(--radius-sm);
+}
+
+.message-file-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  margin-bottom: 4px;
+  min-width: 200px;
+}
+
+.message-file-icon {
+  font-size: 28px;
+  flex-shrink: 0;
+}
+
+.message-file-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.message-file-name {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.message-file-size {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.message-file-download {
+  font-size: 20px;
+  text-decoration: none;
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s;
+}
+
+.message-file-download:hover {
+  background: var(--bg-hover);
+}
+
+/* Sticker in message */
+.message-sticker {
+  margin-bottom: 4px;
+}
+
+.message-sticker img {
+  width: 128px;
+  height: 128px;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+}
+
+/* ============================================
+   Phase 3 — Image Lightbox
+   ============================================ */
+
+.lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  cursor: pointer;
+  animation: fadeIn 0.2s ease;
+}
+
+.lightbox-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(0,0,0,0.5);
+  color: white;
+  font-size: 18px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  z-index: 1;
+}
+
+.lightbox-close:hover {
+  background: rgba(255,255,255,0.1);
+}
+
+.lightbox-image {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+  cursor: default;
+}
+
+/* ============================================
+   Phase 3 — Sticker Panel
+   ============================================ */
+
+.sticker-panel {
+  position: absolute;
+  bottom: 110px;
+  left: 16px;
+  width: 320px;
+  max-height: 360px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+  animation: slideUp 0.2s ease;
+  overflow: hidden;
+}
+
+.sticker-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.sticker-panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.sticker-create-btn {
+  padding: 4px 12px;
+  border: 1px solid var(--accent-cyan);
+  background: rgba(6, 182, 212, 0.1);
+  color: var(--accent-cyan);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.sticker-create-btn:hover {
+  background: rgba(6, 182, 212, 0.2);
+}
+
+.sticker-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 12px;
+  overflow-y: auto;
+  max-height: 280px;
+}
+
+.sticker-item {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  cursor: pointer;
+  border: 1px solid var(--border-color);
+  transition: all 0.15s;
+  background: var(--bg-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sticker-item:hover {
+  border-color: var(--accent-cyan);
+  transform: scale(1.05);
+}
+
+.sticker-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.sticker-delete-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: rgba(239, 68, 68, 0.8);
+  color: white;
+  font-size: 10px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.sticker-item:hover .sticker-delete-btn {
+  display: flex;
+}
+
+.sticker-empty {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 24px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.sticker-empty span:first-child {
+  font-size: 32px;
+}
+
+.sticker-create-first {
+  padding: 8px 16px;
+  border: 1px dashed var(--accent-cyan);
+  background: none;
+  color: var(--accent-cyan);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.15s;
+}
+
+.sticker-create-first:hover {
+  background: rgba(6, 182, 212, 0.1);
+}
+
+.sticker-loading {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 24px;
+  color: var(--text-muted);
+}
+
+/* ============================================
+   Phase 3 — Sticker Maker
+   ============================================ */
+
+.sticker-maker-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  animation: fadeIn 0.2s ease;
+}
+
+.sticker-maker {
+  width: 380px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 24px 60px rgba(0,0,0,0.6);
+  overflow: hidden;
+}
+
+.sticker-maker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.sticker-maker-header h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.sticker-maker-close {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 14px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.sticker-maker-close:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--accent-red);
+}
+
+.sticker-canvas-wrapper {
+  padding: 16px;
+  display: flex;
+  justify-content: center;
+}
+
+.sticker-canvas {
+  width: 256px;
+  height: 256px;
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.sticker-tools {
+  padding: 0 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sticker-tool-group {
+  display: flex;
+  gap: 4px;
+}
+
+.sticker-tool-btn {
+  padding: 6px 12px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 14px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.sticker-tool-btn.active {
+  border-color: var(--accent-cyan);
+  background: rgba(6, 182, 212, 0.1);
+  color: var(--accent-cyan);
+}
+
+.sticker-tool-btn:hover {
+  background: var(--bg-hover);
+}
+
+.sticker-colors {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.sticker-color {
+  width: 22px;
+  height: 22px;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.sticker-color.active {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.3);
+}
+
+.sticker-color:hover {
+  transform: scale(1.15);
+}
+
+.sticker-sizes {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.sticker-size-btn {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.sticker-size-btn.active {
+  border-color: var(--accent-cyan);
+  background: rgba(6, 182, 212, 0.1);
+}
+
+.sticker-size-dot {
+  border-radius: 50%;
+  background: var(--text-primary);
+  display: block;
+}
+
+.sticker-text-input {
+  display: flex;
+  gap: 6px;
+}
+
+.sticker-text-size {
+  width: 70px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+
+.sticker-actions {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-color);
+}
+
+.sticker-upload-btn,
+.sticker-clear-btn,
+.sticker-save-btn {
+  flex: 1;
+  padding: 8px 4px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s;
+}
+
+.sticker-upload-btn {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.sticker-clear-btn {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.sticker-save-btn {
+  background: var(--accent-cyan);
+  color: white;
+  border-color: var(--accent-cyan);
+}
+
+.sticker-upload-btn:hover,
+.sticker-clear-btn:hover {
+  background: var(--bg-hover);
+}
+
+.sticker-save-btn:hover {
+  opacity: 0.9;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

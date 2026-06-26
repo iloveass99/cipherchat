@@ -77,6 +77,7 @@ db.exec(`
     sender_id TEXT NOT NULL,
     encrypted_content TEXT NOT NULL,
     iv TEXT NOT NULL,
+    message_type TEXT DEFAULT 'text',
     timestamp INTEGER DEFAULT (unixepoch()),
     expires_at INTEGER DEFAULT NULL,
     is_read INTEGER DEFAULT 0,
@@ -135,6 +136,13 @@ try {
   console.log('📦 Migration: added recovery columns');
 }
 
+// Migration: add message_type column if missing
+try {
+  db.prepare("SELECT message_type FROM messages LIMIT 1").get();
+} catch {
+  db.exec("ALTER TABLE messages ADD COLUMN message_type TEXT DEFAULT 'text'");
+  console.log('📦 Migration: added message_type column');
+}
 
 const onlineUsers = new Map();
 // Active calls tracking: conversationId -> { callId, callerId, callType, participants }
@@ -152,6 +160,7 @@ app.prepare().then(() => {
       methods: ['GET', 'POST'],
     },
     path: '/api/socketio',
+    maxHttpBufferSize: 16e6, // 16MB for encrypted file messages
   });
 
   // Store on global so API routes can access
@@ -211,12 +220,12 @@ app.prepare().then(() => {
 
     // ---- Handle new message ----
     socket.on('message:send', (data) => {
-      const { id, conversationId, encryptedContent, iv, expiresAt } = data;
+      const { id, conversationId, encryptedContent, iv, expiresAt, messageType } = data;
 
       try {
         db.prepare(
-          'INSERT INTO messages (id, conversation_id, sender_id, encrypted_content, iv, expires_at) VALUES (?, ?, ?, ?, ?, ?)'
-        ).run(id, conversationId, userId, encryptedContent, iv, expiresAt || null);
+          'INSERT INTO messages (id, conversation_id, sender_id, encrypted_content, iv, message_type, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        ).run(id, conversationId, userId, encryptedContent, iv, messageType || 'text', expiresAt || null);
 
         const message = {
           id,
@@ -225,6 +234,7 @@ app.prepare().then(() => {
           sender_username: username,
           encrypted_content: encryptedContent,
           iv,
+          message_type: messageType || 'text',
           timestamp: Math.floor(Date.now() / 1000),
           expires_at: expiresAt || null,
           is_read: 0,

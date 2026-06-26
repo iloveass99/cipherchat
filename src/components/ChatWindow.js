@@ -188,6 +188,113 @@ export default function ChatWindow() {
     );
   };
 
+  const [lightboxImage, setLightboxImage] = useState(null);
+
+  // Render message content (text, file, sticker)
+  const renderMessageContent = useCallback((msg) => {
+    const text = msg.decryptedText;
+
+    if (!text || text === '🔒 Unable to decrypt') {
+      return <div className="message-text">{text}</div>;
+    }
+
+    // Check for sticker
+    if (text.startsWith('__STICKER__')) {
+      try {
+        const stickerData = JSON.parse(text.slice(11));
+        return (
+          <div className="message-sticker">
+            <img src={stickerData.imageData} alt={stickerData.name || 'Sticker'} />
+          </div>
+        );
+      } catch {
+        return <div className="message-text">{text}</div>;
+      }
+    }
+
+    // Check for file message (JSON payload)
+    if (msg.message_type === 'file' || text.startsWith('{"type":"')) {
+      try {
+        const fileData = JSON.parse(text);
+        const { type, name, size, mimeType, data } = fileData;
+
+        const formatSize = (bytes) => {
+          if (bytes < 1024) return `${bytes} B`;
+          if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+          return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+        };
+
+        if (type === 'image') {
+          const src = `data:${mimeType};base64,${data}`;
+          return (
+            <div className="message-media">
+              <img
+                src={src}
+                alt={name}
+                className="message-image"
+                onClick={() => setLightboxImage(src)}
+              />
+              <div className="message-file-name">{name} · {formatSize(size)}</div>
+            </div>
+          );
+        }
+
+        if (type === 'video') {
+          return (
+            <div className="message-media">
+              <video
+                src={`data:${mimeType};base64,${data}`}
+                controls
+                className="message-video"
+                playsInline
+              />
+              <div className="message-file-name">{name} · {formatSize(size)}</div>
+            </div>
+          );
+        }
+
+        if (type === 'audio') {
+          return (
+            <div className="message-media message-audio-file">
+              <audio
+                src={`data:${mimeType};base64,${data}`}
+                controls
+                className="message-audio"
+              />
+              <div className="message-file-name">{name} · {formatSize(size)}</div>
+            </div>
+          );
+        }
+
+        // Generic file
+        const blob = new Blob([Uint8Array.from(atob(data), c => c.charCodeAt(0))], { type: mimeType });
+        const downloadUrl = URL.createObjectURL(blob);
+
+        return (
+          <div className="message-file-card">
+            <div className="message-file-icon">📄</div>
+            <div className="message-file-info">
+              <div className="message-file-name">{name}</div>
+              <div className="message-file-size">{formatSize(size)}</div>
+            </div>
+            <a
+              href={downloadUrl}
+              download={name}
+              className="message-file-download"
+              title="Download"
+            >
+              ⬇️
+            </a>
+          </div>
+        );
+      } catch {
+        return <div className="message-text">{text}</div>;
+      }
+    }
+
+    return <div className="message-text">{text}</div>;
+  }, []);
+
   // Empty state
   if (!activeConversation) {
     return (
@@ -318,7 +425,7 @@ export default function ChatWindow() {
                         {senderName}
                       </div>
                     )}
-                    <div className="message-text">{msg.decryptedText}</div>
+                    {renderMessageContent(msg)}
                     <div className="message-footer">
                       {msg.expires_at && (
                         <span className="message-disappearing">
@@ -353,6 +460,14 @@ export default function ChatWindow() {
           </>
         )}
       </div>
+
+      {/* Image Lightbox */}
+      {lightboxImage && (
+        <div className="lightbox-overlay" onClick={() => setLightboxImage(null)}>
+          <button className="lightbox-close" onClick={() => setLightboxImage(null)}>✕</button>
+          <img src={lightboxImage} alt="Full size" className="lightbox-image" />
+        </div>
+      )}
     </div>
   );
 }

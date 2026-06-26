@@ -212,7 +212,7 @@ export async function unwrapPrivateKey(wrappedKey, passphrase) {
 
 // ---- Utility Functions ----
 
-function arrayBufferToBase64(buffer) {
+export function arrayBufferToBase64(buffer) {
   const bytes = buffer instanceof ArrayBuffer ? new Uint8Array(buffer) : buffer;
   let binary = '';
   for (let i = 0; i < bytes.byteLength; i++) {
@@ -221,13 +221,49 @@ function arrayBufferToBase64(buffer) {
   return btoa(binary);
 }
 
-function base64ToArrayBuffer(base64) {
+export function base64ToArrayBuffer(base64) {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) {
     bytes[i] = binary.charCodeAt(i);
   }
   return bytes.buffer;
+}
+
+// ---- File Encryption / Decryption ----
+
+/**
+ * Encrypt a file (ArrayBuffer) using AES-256-GCM
+ * @param {ArrayBuffer} data - The file data to encrypt
+ * @param {CryptoKey} sharedKey - The derived shared key
+ * @returns {Promise<{encryptedData: string, iv: string}>} Base64-encoded encrypted data and IV
+ */
+export async function encryptFile(data, sharedKey) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encrypted = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    sharedKey,
+    data
+  );
+  return {
+    encryptedData: arrayBufferToBase64(encrypted),
+    iv: arrayBufferToBase64(iv),
+  };
+}
+
+/**
+ * Decrypt an encrypted file
+ * @param {string} encryptedDataB64 - Base64-encoded encrypted data
+ * @param {string} ivB64 - Base64-encoded IV
+ * @param {CryptoKey} sharedKey - The derived shared key
+ * @returns {Promise<ArrayBuffer>} Decrypted file data
+ */
+export async function decryptFile(encryptedDataB64, ivB64, sharedKey) {
+  return await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: base64ToArrayBuffer(ivB64) },
+    sharedKey,
+    base64ToArrayBuffer(encryptedDataB64)
+  );
 }
 
 /**

@@ -6,11 +6,12 @@
  */
 
 const DB_NAME = 'cipherchat-keys';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORES = {
   PRIVATE_KEYS: 'privateKeys',
   PUBLIC_KEYS: 'publicKeys',
   SESSION_KEYS: 'sessionKeys',
+  STICKERS: 'stickers',
 };
 
 /**
@@ -36,6 +37,9 @@ function openDB() {
       }
       if (!db.objectStoreNames.contains(STORES.SESSION_KEYS)) {
         db.createObjectStore(STORES.SESSION_KEYS, { keyPath: 'conversationId' });
+      }
+      if (!db.objectStoreNames.contains(STORES.STICKERS)) {
+        db.createObjectStore(STORES.STICKERS, { keyPath: 'id' });
       }
     };
 
@@ -182,4 +186,37 @@ export async function clearAllKeys() {
   await dbClear(STORES.PRIVATE_KEYS);
   await dbClear(STORES.PUBLIC_KEYS);
   await dbClear(STORES.SESSION_KEYS);
+}
+
+// ---- Sticker Storage ----
+
+/**
+ * Save a custom sticker
+ * @param {string} id - Unique sticker ID
+ * @param {string} imageData - Base64 data URL of the sticker image
+ * @param {string} name - Sticker name
+ */
+export async function saveSticker(id, imageData, name = '') {
+  await dbPut(STORES.STICKERS, { id, imageData, name, createdAt: Date.now() });
+}
+
+/**
+ * Get all saved stickers
+ */
+export async function getStickers() {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.STICKERS, 'readonly');
+    const store = tx.objectStore(STORES.STICKERS);
+    const request = store.getAll();
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+/**
+ * Delete a sticker
+ */
+export async function deleteSticker(id) {
+  await dbDelete(STORES.STICKERS, id);
 }

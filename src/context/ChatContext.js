@@ -19,6 +19,8 @@ import {
   wrapPrivateKey,
   unwrapPrivateKey,
   generateRecoveryKey,
+  encryptFile,
+  arrayBufferToBase64,
 } from '@/lib/crypto';
 import {
   storeWrappedPrivateKey,
@@ -57,6 +59,7 @@ export function ChatProvider({ children }) {
   const remoteStreamRef = useRef(null);
   const peerConnectionRef = useRef(null);
   const callTimerRef = useRef(null);
+  const pendingOfferRef = useRef(null); // Queue WebRTC offer until user accepts
 
   // Crypto state
   const privateKeyRef = useRef(null);
@@ -321,6 +324,52 @@ export function ChatProvider({ children }) {
     return messageId;
   }, [getSessionKey]);
 
+  const encryptAndSendFile = useCallback(async (conversationId, file, otherPublicKeyJwk, expiresIn = null) => {
+    const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+    if (file.size > MAX_SIZE) {
+      throw new Error('File too large. Maximum size is 10MB.');
+    }
+
+    const sessionKey = await getSessionKey(conversationId, otherPublicKeyJwk);
+
+    // Read file as ArrayBuffer
+    const fileData = await file.arrayBuffer();
+
+    // Create metadata + data payload
+    const payload = JSON.stringify({
+      type: file.type.startsWith('image/') ? 'image' :
+            file.type.startsWith('video/') ? 'video' :
+            file.type.startsWith('audio/') ? 'audio' : 'file',
+      name: file.name,
+      size: file.size,
+      mimeType: file.type,
+      data: arrayBufferToBase64(fileData),
+    });
+
+    // Encrypt the entire payload as a message
+    const { ciphertext, iv } = await encryptMessage(payload, sessionKey);
+
+    const messageId = crypto.randomUUID();
+    let expiresAt = null;
+    if (expiresIn) {
+      expiresAt = Math.floor(Date.now() / 1000) + expiresIn;
+    }
+
+    const socket = getSocket();
+    if (socket) {
+      socket.emit('message:send', {
+        id: messageId,
+        conversationId,
+        encryptedContent: ciphertext,
+        iv,
+        expiresAt,
+        messageType: 'file',
+      });
+    }
+
+    return messageId;
+  }, [getSessionKey]);
+
   const decryptMessageContent = useCallback(async (encryptedContent, iv, conversationId, otherPublicKeyJwk) => {
     try {
       const sessionKey = await getSessionKey(conversationId, otherPublicKeyJwk);
@@ -544,11 +593,62 @@ export function ChatProvider({ children }) {
       });
     }
 
+    // Process the queued WebRTC offer
+    if (pendingOfferRef.current) {
+      const { offer, fromUserId } = pendingOfferRef.current;
+      pendingOfferRef.current = null;
+
+      try {
+        const webrtc = await import('@/lib/webrtc');
+
+        const onIceCandidate = (candidate) => {
+          if (socket) {
+            socket.emit('webrtc:ice-candidate', {
+              conversationId: callConversationId,
+              candidate,
+              targetUserId: fromUserId,
+            });
+          }
+        };
+
+        const onTrack = (stream) => {
+          remoteStreamRef.current = stream;
+        };
+
+        const onConnectionStateChange = (state) => {
+          if (state === 'connected') {
+            setCallState('active');
+          } else if (state === 'disconnected' || state === 'failed') {
+            endCallCleanup();
+          }
+        };
+
+        const { answer, localStream, peerConnection: pc } = await webrtc.answerCall(
+          offer,
+          callType || 'audio',
+          onIceCandidate,
+          onTrack,
+          onConnectionStateChange
+        );
+
+        localStreamRef.current = localStream;
+        peerConnectionRef.current = pc;
+
+        socket.emit('webrtc:answer', {
+          conversationId: callConversationId,
+          answer,
+          targetUserId: fromUserId,
+        });
+      } catch (err) {
+        console.error('Error processing queued offer:', err);
+      }
+    }
+
     // Start call duration timer
     callTimerRef.current = setInterval(() => {
       setCallDuration(prev => prev + 1);
     }, 1000);
-  }, [callState, callConversationId, callId]);
+  }, [callState, callConversationId, callId, callType, endCallCleanup]);
 
   const rejectCall = useCallback(() => {
     if (callState !== 'incoming') return;
@@ -720,53 +820,8 @@ export function ChatProvider({ children }) {
     };
 
     const handleWebRTCOffer = async ({ conversationId, offer, fromUserId }) => {
-      try {
-        const webrtc = await import('@/lib/webrtc');
-        
-        const onIceCandidate = (candidate) => {
-          socket.emit('webrtc:ice-candidate', {
-            conversationId,
-            candidate,
-            targetUserId: fromUserId,
-          });
-        };
-
-        const onTrack = (stream) => {
-          remoteStreamRef.current = stream;
-        };
-
-        const onConnectionStateChange = (state) => {
-          if (state === 'connected') {
-            setCallState('active');
-            if (!callTimerRef.current) {
-              callTimerRef.current = setInterval(() => {
-                setCallDuration(prev => prev + 1);
-              }, 1000);
-            }
-          } else if (state === 'disconnected' || state === 'failed') {
-            endCallCleanup();
-          }
-        };
-
-        const { answer, localStream, peerConnection: pc } = await webrtc.answerCall(
-          offer,
-          callType || 'audio',
-          onIceCandidate,
-          onTrack,
-          onConnectionStateChange
-        );
-
-        localStreamRef.current = localStream;
-        peerConnectionRef.current = pc;
-
-        socket.emit('webrtc:answer', {
-          conversationId,
-          answer,
-          targetUserId: fromUserId,
-        });
-      } catch (err) {
-        console.error('Error handling WebRTC offer:', err);
-      }
+      // Queue the offer — don't answer until user clicks Accept
+      pendingOfferRef.current = { offer, fromUserId, conversationId };
     };
 
     const handleWebRTCAnswer = async ({ answer }) => {
@@ -916,6 +971,9 @@ export function ChatProvider({ children }) {
 
     // Recovery
     recoverAccount,
+
+    // File sharing (Phase 3)
+    encryptAndSendFile,
   };
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
