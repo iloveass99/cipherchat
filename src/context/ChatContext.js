@@ -113,7 +113,11 @@ export function ChatProvider({ children }) {
       return {
         success: true,
         recoveryKey,
-        completeRegistration: () => {
+        completeRegistration: async () => {
+          // Save private key to sessionStorage for refresh persistence
+          const privKeyJwk = await exportPrivateKey(keyPair.privateKey);
+          sessionStorage.setItem('cipherchat_privkey', JSON.stringify(privKeyJwk));
+
           localStorage.setItem('cipherchat_token', data.token);
           localStorage.setItem('cipherchat_user', JSON.stringify(data.user));
           setUser(data.user);
@@ -178,6 +182,10 @@ export function ChatProvider({ children }) {
       passphraseRef.current = password;
       localStorage.setItem('cipherchat_token', data.token);
       localStorage.setItem('cipherchat_user', JSON.stringify(data.user));
+
+      // Save private key to sessionStorage for refresh persistence
+      const privKeyJwk = await exportPrivateKey(privateKeyRef.current);
+      sessionStorage.setItem('cipherchat_privkey', JSON.stringify(privKeyJwk));
 
       setUser(data.user);
       setToken(data.token);
@@ -265,6 +273,7 @@ export function ChatProvider({ children }) {
     disconnectSocket();
     localStorage.removeItem('cipherchat_token');
     localStorage.removeItem('cipherchat_user');
+    sessionStorage.removeItem('cipherchat_privkey');
     privateKeyRef.current = null;
     passphraseRef.current = null;
     sessionKeysRef.current = new Map();
@@ -952,25 +961,36 @@ export function ChatProvider({ children }) {
   }, [user, activeConversation, callState, callType, loadMessages, loadConversations, endCallCleanup]);
 
   // ---- Session Restore ----
-  // Note: We force re-login because the private key can't be recovered
-  // without the password. Session keys are cached in IndexedDB and will
-  // work for existing conversations, but new key derivations need the private key.
+  // Try to restore the session from localStorage + sessionStorage.
+  // The private key is saved in sessionStorage (survives refresh, cleared on tab close).
 
   useEffect(() => {
     const restore = async () => {
       try {
         const savedToken = localStorage.getItem('cipherchat_token');
         const savedUser = localStorage.getItem('cipherchat_user');
+        const savedPrivKey = sessionStorage.getItem('cipherchat_privkey');
 
-        if (savedToken && savedUser) {
-          // We have a saved session, but no private key in memory.
-          // Force re-login so the user provides their password to unwrap the key.
-          // Clear the saved session to show the login screen.
+        if (savedToken && savedUser && savedPrivKey) {
+          // Restore private key from sessionStorage
+          const privKeyJwk = JSON.parse(savedPrivKey);
+          privateKeyRef.current = await importPrivateKey(privKeyJwk);
+
+          const parsedUser = JSON.parse(savedUser);
+          setUser(parsedUser);
+          setToken(savedToken);
+          initSocket(parsedUser.id, parsedUser.username);
+        } else if (savedToken && savedUser) {
+          // No private key in session (e.g., new tab) — force re-login
           localStorage.removeItem('cipherchat_token');
           localStorage.removeItem('cipherchat_user');
         }
       } catch (err) {
         console.error('Session restore error:', err);
+        // Clear corrupted session data
+        localStorage.removeItem('cipherchat_token');
+        localStorage.removeItem('cipherchat_user');
+        sessionStorage.removeItem('cipherchat_privkey');
       } finally {
         setIsLoading(false);
       }

@@ -119,9 +119,9 @@ export default function AuthForm() {
 
             <button
               className="auth-btn"
-              onClick={() => {
+              onClick={async () => {
                 if (completeRegRef.current) {
-                  completeRegRef.current();
+                  await completeRegRef.current();
                   completeRegRef.current = null;
                 }
                 setShowRecoveryKey(null);
