@@ -29,7 +29,7 @@ export async function GET(request) {
     const userId = searchParams.get('id');
     if (userId) {
       const user = db.prepare(
-        'SELECT id, username, public_key FROM users WHERE id = ?'
+        'SELECT id, username, public_key, display_name, avatar_url, bio FROM users WHERE id = ?'
       ).get(userId);
 
       if (!user) {
@@ -39,6 +39,9 @@ export async function GET(request) {
       return NextResponse.json({
         id: user.id,
         username: user.username,
+        displayName: user.display_name || null,
+        avatarUrl: user.avatar_url || null,
+        bio: user.bio || null,
         publicKey: JSON.parse(user.public_key),
         online: global.__onlineUsers?.has(user.id) || false,
       });
@@ -53,13 +56,16 @@ export async function GET(request) {
     }
 
     const users = db.prepare(
-      'SELECT id, username, public_key FROM users WHERE username LIKE ? AND id != ? LIMIT 20'
+      'SELECT id, username, public_key, display_name, avatar_url, bio FROM users WHERE username LIKE ? AND id != ? LIMIT 20'
     ).all(`%${search}%`, currentUserId);
 
     return NextResponse.json(
       users.map(u => ({
         id: u.id,
         username: u.username,
+        displayName: u.display_name || null,
+        avatarUrl: u.avatar_url || null,
+        bio: u.bio || null,
         publicKey: JSON.parse(u.public_key),
         online: global.__onlineUsers?.has(u.id) || false,
       }))

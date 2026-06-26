@@ -3,7 +3,7 @@
 /**
  * CipherChat — Chat View (Phase 2)
  * Main chat interface with sidebar, chat window, message input,
- * call screens, and group creation
+ * call screens, group creation, and profile editor
  */
 
 import { useState } from 'react';
@@ -15,10 +15,12 @@ import UserSearch from '@/components/UserSearch';
 import CreateGroup from '@/components/CreateGroup';
 import CallScreen from '@/components/CallScreen';
 import IncomingCall from '@/components/IncomingCall';
+import ProfileEditor from '@/components/ProfileEditor';
 
 export default function ChatView() {
   const [showUserSearch, setShowUserSearch] = useState(false);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const { activeConversation, callState } = useChat();
 
   return (
@@ -30,6 +32,7 @@ export default function ChatView() {
         <ChatSidebar
           onOpenSearch={() => setShowUserSearch(true)}
           onOpenCreateGroup={() => setShowCreateGroup(true)}
+          onOpenProfile={() => setShowProfile(true)}
         />
 
         <div className="chat-main">
@@ -49,9 +52,15 @@ export default function ChatView() {
         onClose={() => setShowCreateGroup(false)}
       />
 
+      <ProfileEditor
+        isOpen={showProfile}
+        onClose={() => setShowProfile(false)}
+      />
+
       {/* Call UI */}
       {callState === 'incoming' && <IncomingCall />}
       {(callState === 'active' || callState === 'ringing') && <CallScreen />}
     </>
   );
 }
+

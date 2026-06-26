@@ -8,7 +8,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useChat } from '@/context/ChatContext';
 
-export default function ChatSidebar({ onOpenSearch, onOpenCreateGroup }) {
+export default function ChatSidebar({ onOpenSearch, onOpenCreateGroup, onOpenProfile }) {
   const {
     user,
     conversations,
@@ -165,7 +165,9 @@ export default function ChatSidebar({ onOpenSearch, onOpenCreateGroup }) {
                     fontSize: '16px',
                   } : undefined}
                 >
-                  {isGroup ? '👥' : getInitials(convName)}
+                  {isGroup ? '👥' : conv.other_avatar_url ? (
+                    <img src={conv.other_avatar_url} alt="" className="avatar-img" />
+                  ) : getInitials(conv.other_display_name || convName)}
                   {!isGroup && (
                     <span className={`status-dot ${isOnline ? 'online' : 'offline'}`} />
                   )}
@@ -173,7 +175,7 @@ export default function ChatSidebar({ onOpenSearch, onOpenCreateGroup }) {
 
                 <div className="conversation-info">
                   <div className="conversation-name">
-                    {convName}
+                    {isGroup ? convName : (conv.other_display_name || convName)}
                     {isGroup && (
                       <span style={{
                         fontSize: '11px',
@@ -219,14 +221,24 @@ export default function ChatSidebar({ onOpenSearch, onOpenCreateGroup }) {
 
       {/* Footer - User info */}
       <div className="sidebar-footer">
-        <div className="conversation-avatar" style={{ width: 36, height: 36, minWidth: 36, fontSize: 13 }}>
-          {getInitials(user?.username)}
-        </div>
-        <div className="user-info">
-          <div className="user-name">{user?.username}</div>
-          <div className="user-status">
-            <span className="user-status-dot" />
-            Online
+        <div
+          className="sidebar-footer-profile"
+          onClick={onOpenProfile}
+          title="Edit profile"
+          role="button"
+          tabIndex={0}
+        >
+          <div className="conversation-avatar" style={{ width: 36, height: 36, minWidth: 36, fontSize: 13 }}>
+            {user?.avatarUrl ? (
+              <img src={user.avatarUrl} alt="" className="avatar-img" />
+            ) : getInitials(user?.displayName || user?.username)}
+          </div>
+          <div className="user-info">
+            <div className="user-name">{user?.displayName || user?.username}</div>
+            <div className="user-status">
+              <span className="user-status-dot" />
+              Online
+            </div>
           </div>
         </div>
         <button className="logout-btn" onClick={logout} type="button">

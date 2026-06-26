@@ -79,7 +79,7 @@ export async function POST(request) {
 
       return NextResponse.json({
         success: true,
-        user: { id: userId, username },
+        user: { id: userId, username, displayName: null, avatarUrl: null, bio: null },
         token,
       });
     }
@@ -104,7 +104,13 @@ export async function POST(request) {
 
       return NextResponse.json({
         success: true,
-        user: { id: user.id, username: user.username },
+        user: {
+          id: user.id,
+          username: user.username,
+          displayName: user.display_name || null,
+          avatarUrl: user.avatar_url || null,
+          bio: user.bio || null,
+        },
         token,
         publicKey: JSON.parse(user.public_key),
         wrappedPrivateKey: user.wrapped_private_key ? JSON.parse(user.wrapped_private_key) : null,
@@ -145,7 +151,13 @@ export async function POST(request) {
 
       return NextResponse.json({
         success: true,
-        user: { id: user.id, username: user.username },
+        user: {
+          id: user.id,
+          username: user.username,
+          displayName: user.display_name || null,
+          avatarUrl: user.avatar_url || null,
+          bio: user.bio || null,
+        },
         token,
         publicKey: JSON.parse(user.public_key),
         // Send back the recovery-wrapped key so client can unwrap with recovery key 

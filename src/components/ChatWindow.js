@@ -329,7 +329,9 @@ export default function ChatWindow() {
     );
   }
 
-  const headerName = isGroup ? activeConversation.group_name : activeConversation.other_username;
+  const headerName = isGroup ? activeConversation.group_name : (activeConversation.other_display_name || activeConversation.other_username);
+  const headerUsername = isGroup ? null : activeConversation.other_username;
+  const headerAvatar = isGroup ? null : activeConversation.other_avatar_url;
   const headerSubtext = isGroup
     ? `${activeConversation.members?.length || 0} members`
     : typingInfo ? 'typing...' : isOnline ? 'online' : 'offline';
@@ -350,13 +352,15 @@ export default function ChatWindow() {
             width: 36, height: 36, minWidth: 36, fontSize: 13,
             background: isGroup ? 'linear-gradient(135deg, var(--accent-cyan), var(--accent-green))' : undefined,
           }}>
-            {isGroup ? '👥' : (headerName?.slice(0, 2).toUpperCase())}
+            {isGroup ? '👥' : headerAvatar ? (
+              <img src={headerAvatar} alt="" className="avatar-img" />
+            ) : (headerName?.slice(0, 2).toUpperCase())}
             {!isGroup && <span className={`status-dot ${isOnline ? 'online' : 'offline'}`} />}
           </div>
           <div>
             <div className="chat-header-name">{headerName}</div>
             <div className={`chat-header-status ${isOnline ? 'online' : ''}`}>
-              {headerSubtext}
+              {headerUsername && headerUsername !== headerName ? `@${headerUsername} · ` : ''}{headerSubtext}
             </div>
           </div>
         </div>

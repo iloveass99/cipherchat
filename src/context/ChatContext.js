@@ -500,6 +500,42 @@ export function ChatProvider({ children }) {
     }
   }, []);
 
+  // ---- Profile ----
+
+  const updateProfile = useCallback(async ({ displayName, avatarUrl, bio }) => {
+    if (!user) return false;
+    try {
+      const res = await fetch('/api/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          displayName,
+          avatarUrl,
+          bio,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      // Update user state with new profile data
+      const updatedUser = {
+        ...user,
+        displayName: data.user.displayName,
+        avatarUrl: data.user.avatarUrl,
+        bio: data.user.bio,
+      };
+      setUser(updatedUser);
+      localStorage.setItem('cipherchat_user', JSON.stringify(updatedUser));
+
+      return true;
+    } catch (err) {
+      console.error('Profile update error:', err);
+      return false;
+    }
+  }, [user]);
+
   // ---- Call Functions (Phase 2) ----
 
   const endCallCleanup = useCallback(() => {
@@ -1043,6 +1079,9 @@ export function ChatProvider({ children }) {
 
     // File sharing (Phase 3)
     encryptAndSendFile,
+
+    // Profile
+    updateProfile,
   };
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;

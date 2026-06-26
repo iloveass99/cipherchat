@@ -48,6 +48,9 @@ db.exec(`
     wrapped_private_key TEXT DEFAULT NULL,
     recovery_key_hash TEXT DEFAULT NULL,
     recovery_wrapped_key TEXT DEFAULT NULL,
+    display_name TEXT DEFAULT NULL,
+    avatar_url TEXT DEFAULT NULL,
+    bio TEXT DEFAULT NULL,
     created_at INTEGER DEFAULT (unixepoch())
   );
 
@@ -144,6 +147,16 @@ try {
 } catch {
   db.exec("ALTER TABLE messages ADD COLUMN message_type TEXT DEFAULT 'text'");
   console.log('📦 Migration: added message_type column');
+}
+
+// Migration: add profile columns if missing
+try {
+  db.prepare("SELECT display_name FROM users LIMIT 1").get();
+} catch {
+  db.exec("ALTER TABLE users ADD COLUMN display_name TEXT DEFAULT NULL");
+  db.exec("ALTER TABLE users ADD COLUMN avatar_url TEXT DEFAULT NULL");
+  db.exec("ALTER TABLE users ADD COLUMN bio TEXT DEFAULT NULL");
+  console.log('📦 Migration: added profile columns');
 }
 
 const onlineUsers = new Map();

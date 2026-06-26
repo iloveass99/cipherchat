@@ -39,6 +39,8 @@ export async function GET(request) {
         CASE WHEN c.participant_1 = ? THEN c.participant_2 ELSE c.participant_1 END as other_user_id,
         u.username as other_username,
         u.public_key as other_public_key,
+        u.display_name as other_display_name,
+        u.avatar_url as other_avatar_url,
         m.encrypted_content as last_message_content,
         m.iv as last_message_iv,
         m.sender_id as last_message_sender,
@@ -145,7 +147,7 @@ export async function POST(request) {
 
     // Get other user info
     const otherUser = db.prepare(
-      'SELECT id, username, public_key FROM users WHERE id = ?'
+      'SELECT id, username, public_key, display_name, avatar_url FROM users WHERE id = ?'
     ).get(otherUserId);
 
     return NextResponse.json({
@@ -153,6 +155,8 @@ export async function POST(request) {
       other_user_id: otherUserId,
       other_username: otherUser?.username,
       other_public_key: otherUser ? JSON.parse(otherUser.public_key) : null,
+      other_display_name: otherUser?.display_name || null,
+      other_avatar_url: otherUser?.avatar_url || null,
       unread_count: 0,
     });
   } catch (error) {

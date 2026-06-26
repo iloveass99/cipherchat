@@ -104,10 +104,20 @@ export default function UserSearch({ isOpen, onClose }) {
               results.map(u => (
                 <div key={u.id} className="user-search-item">
                   <div className="conversation-avatar" style={{ width: 40, height: 40, minWidth: 40, fontSize: 14 }}>
-                    {u.username.slice(0, 2).toUpperCase()}
+                    {u.avatarUrl ? (
+                      <img src={u.avatarUrl} alt="" className="avatar-img" />
+                    ) : u.username.slice(0, 2).toUpperCase()}
                     <span className={`status-dot ${onlineUsers.has(u.id) ? 'online' : 'offline'}`} />
                   </div>
-                  <span className="user-search-name">{u.username}</span>
+                  <div className="user-search-info">
+                    <span className="user-search-name">{u.displayName || u.username}</span>
+                    {u.displayName && (
+                      <span className="user-search-username">@{u.username}</span>
+                    )}
+                    {u.bio && (
+                      <span className="user-search-bio">{u.bio.length > 50 ? u.bio.slice(0, 50) + '...' : u.bio}</span>
+                    )}
+                  </div>
                   <button
                     className="user-search-action"
                     onClick={() => handleStartChat(u)}
