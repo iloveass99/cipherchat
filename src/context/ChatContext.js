@@ -504,9 +504,9 @@ export function ChatProvider({ children }) {
         }
       };
 
-      const { offer, localStream } = await webrtc.startCall(type, onIceCandidate, onTrack, onConnectionStateChange);
+      const { offer, localStream, peerConnection: pc } = await webrtc.startCall(type, onIceCandidate, onTrack, onConnectionStateChange);
       localStreamRef.current = localStream;
-      peerConnectionRef.current = webrtc.createPeerConnection(onIceCandidate, onTrack, onConnectionStateChange);
+      peerConnectionRef.current = pc;
 
       // Send call initiation + offer
       const socket = getSocket();
@@ -748,7 +748,7 @@ export function ChatProvider({ children }) {
           }
         };
 
-        const { answer, localStream } = await webrtc.answerCall(
+        const { answer, localStream, peerConnection: pc } = await webrtc.answerCall(
           offer,
           callType || 'audio',
           onIceCandidate,
@@ -757,6 +757,7 @@ export function ChatProvider({ children }) {
         );
 
         localStreamRef.current = localStream;
+        peerConnectionRef.current = pc;
 
         socket.emit('webrtc:answer', {
           conversationId,

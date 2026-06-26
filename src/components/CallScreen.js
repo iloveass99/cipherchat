@@ -2,7 +2,7 @@
 
 /**
  * CipherChat — Call Screen
- * Full-screen video/audio call UI
+ * Full-screen video/audio call UI with remote audio playback
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -23,8 +23,10 @@ export default function CallScreen() {
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
+  const remoteAudioRef = useRef(null);
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(false);
+  const [remoteConnected, setRemoteConnected] = useState(false);
 
   // Attach local stream to video element
   useEffect(() => {
@@ -33,12 +35,45 @@ export default function CallScreen() {
     }
   }, [localStreamRef, callState]);
 
-  // Attach remote stream to video element
+  // Attach remote stream to video/audio element
   useEffect(() => {
-    if (remoteVideoRef.current && remoteStreamRef?.current) {
-      remoteVideoRef.current.srcObject = remoteStreamRef.current;
+    const stream = remoteStreamRef?.current;
+    if (!stream) return;
+
+    setRemoteConnected(true);
+
+    // For video calls, attach to video element
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = stream;
     }
-  }, [remoteStreamRef, callState]);
+
+    // ALWAYS attach to audio element for audio playback
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.srcObject = stream;
+      remoteAudioRef.current.play().catch(err => {
+        console.error('Audio autoplay blocked:', err);
+      });
+    }
+  }, [remoteStreamRef, remoteStreamRef?.current, callState]);
+
+  // Poll for remote stream (it may arrive after render)
+  useEffect(() => {
+    if (callState !== 'active' && callState !== 'ringing') return;
+
+    const interval = setInterval(() => {
+      const stream = remoteStreamRef?.current;
+      if (stream && remoteAudioRef.current && !remoteAudioRef.current.srcObject) {
+        remoteAudioRef.current.srcObject = stream;
+        remoteAudioRef.current.play().catch(() => {});
+        setRemoteConnected(true);
+      }
+      if (stream && remoteVideoRef.current && !remoteVideoRef.current.srcObject) {
+        remoteVideoRef.current.srcObject = stream;
+      }
+    }, 500);
+
+    return () => clearInterval(interval);
+  }, [callState, remoteStreamRef]);
 
   const handleMute = useCallback(() => {
     const muted = toggleMuteCall();
@@ -64,6 +99,9 @@ export default function CallScreen() {
   return (
     <div className="call-screen-overlay">
       <div className={`call-screen ${isVideoCall ? 'video-call' : 'audio-call'}`}>
+        {/* Hidden audio element — CRITICAL for remote audio playback */}
+        <audio ref={remoteAudioRef} autoPlay playsInline style={{ display: 'none' }} />
+
         {/* Remote Video (large) */}
         {isVideoCall && (
           <div className="call-remote-video">

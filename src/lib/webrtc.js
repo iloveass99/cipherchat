@@ -6,6 +6,8 @@
 const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'stun:stun2.l.google.com:19302' },
+  { urls: 'stun:stun3.l.google.com:19302' },
 ];
 
 let peerConnection = null;
@@ -17,7 +19,8 @@ let remoteStream = null;
  */
 export function createPeerConnection(onIceCandidate, onTrack, onConnectionStateChange) {
   if (peerConnection) {
-    closePeerConnection();
+    peerConnection.close();
+    peerConnection = null;
   }
 
   peerConnection = new RTCPeerConnection({ iceServers: ICE_SERVERS });
@@ -36,8 +39,26 @@ export function createPeerConnection(onIceCandidate, onTrack, onConnectionStateC
   };
 
   peerConnection.onconnectionstatechange = () => {
-    if (onConnectionStateChange) {
+    if (onConnectionStateChange && peerConnection) {
       onConnectionStateChange(peerConnection.connectionState);
+    }
+  };
+
+  // Also listen for ICE connection state changes (more reliable than connectionState)
+  peerConnection.oniceconnectionstatechange = () => {
+    if (peerConnection) {
+      console.log('ICE connection state:', peerConnection.iceConnectionState);
+      if (peerConnection.iceConnectionState === 'connected' || 
+          peerConnection.iceConnectionState === 'completed') {
+        if (onConnectionStateChange) {
+          onConnectionStateChange('connected');
+        }
+      } else if (peerConnection.iceConnectionState === 'failed' ||
+                 peerConnection.iceConnectionState === 'disconnected') {
+        if (onConnectionStateChange) {
+          onConnectionStateChange(peerConnection.iceConnectionState);
+        }
+      }
     }
   };
 
@@ -67,7 +88,8 @@ export async function captureLocalMedia(callType) {
 }
 
 /**
- * Start a call — capture media, create offer
+ * Start a call — capture media, create peer connection, create offer
+ * Returns the peer connection, offer, and local stream
  */
 export async function startCall(callType, onIceCandidate, onTrack, onConnectionStateChange) {
   const stream = await captureLocalMedia(callType);
@@ -82,7 +104,7 @@ export async function startCall(callType, onIceCandidate, onTrack, onConnectionS
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
 
-  return { offer: pc.localDescription, localStream: stream };
+  return { offer: pc.localDescription, localStream: stream, peerConnection: pc };
 }
 
 /**
@@ -102,14 +124,14 @@ export async function answerCall(offer, callType, onIceCandidate, onTrack, onCon
   const answer = await pc.createAnswer();
   await pc.setLocalDescription(answer);
 
-  return { answer: pc.localDescription, localStream: stream };
+  return { answer: pc.localDescription, localStream: stream, peerConnection: pc };
 }
 
 /**
  * Handle incoming answer (for the caller)
  */
 export async function handleAnswer(answer) {
-  if (peerConnection) {
+  if (peerConnection && peerConnection.signalingState !== 'closed') {
     await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
   }
 }
@@ -118,7 +140,7 @@ export async function handleAnswer(answer) {
  * Handle incoming ICE candidate
  */
 export async function handleIceCandidate(candidate) {
-  if (peerConnection) {
+  if (peerConnection && peerConnection.signalingState !== 'closed') {
     try {
       await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
     } catch (err) {
@@ -156,14 +178,6 @@ export function toggleCamera() {
 }
 
 /**
- * Toggle speaker (not widely supported, returns false)
- */
-export function toggleSpeaker() {
-  // Speaker toggle requires setSinkId which has limited support
-  return false;
-}
-
-/**
  * End call and cleanup
  */
 export function closePeerConnection() {
@@ -180,6 +194,13 @@ export function closePeerConnection() {
   }
 
   remoteStream = null;
+}
+
+/**
+ * Get current peer connection
+ */
+export function getPeerConnection() {
+  return peerConnection;
 }
 
 /**
