@@ -5,7 +5,7 @@
  * Edit display name, avatar, and bio
  */
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useChat } from '@/context/ChatContext';
 
 export default function ProfileEditor({ isOpen, onClose }) {
@@ -18,36 +18,34 @@ export default function ProfileEditor({ isOpen, onClose }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [initialized, setInitialized] = useState(false);
   const fileInputRef = useRef(null);
 
-  // Initialize form when modal opens
-  const initializeForm = useCallback(() => {
-    if (user) {
+  // Initialize form when modal opens (useEffect avoids setState-during-render)
+  useEffect(() => {
+    if (isOpen && !initialized && user) {
       setDisplayName(user.displayName || '');
       setBio(user.bio || '');
       setAvatarPreview(user.avatarUrl || null);
       setAvatarData(undefined);
       setError('');
       setSuccess(false);
+      setInitialized(true);
     }
-  }, [user]);
-
-  // Reset form when opening
-  if (isOpen && displayName === '' && bio === '' && !avatarPreview && user) {
-    initializeForm();
-  }
+    if (!isOpen && initialized) {
+      setInitialized(false);
+    }
+  }, [isOpen, initialized, user]);
 
   const handleAvatarSelect = useCallback((e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
     if (!file.type.startsWith('image/')) {
       setError('Please select an image file');
       return;
     }
 
-    // Validate size (max 5MB input, will be resized)
     if (file.size > 5 * 1024 * 1024) {
       setError('Image must be less than 5MB');
       return;
@@ -55,12 +53,10 @@ export default function ProfileEditor({ isOpen, onClose }) {
 
     setError('');
 
-    // Read and resize the image
     const reader = new FileReader();
     reader.onload = (event) => {
-      const img = new Image();
+      const img = new window.Image();
       img.onload = () => {
-        // Resize to 200x200 max
         const canvas = document.createElement('canvas');
         const MAX_SIZE = 200;
         let width = img.width;
@@ -83,7 +79,6 @@ export default function ProfileEditor({ isOpen, onClose }) {
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
 
-        // Convert to base64 (JPEG for smaller size)
         const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
         setAvatarPreview(dataUrl);
         setAvatarData(dataUrl);
@@ -95,7 +90,7 @@ export default function ProfileEditor({ isOpen, onClose }) {
 
   const handleRemoveAvatar = useCallback(() => {
     setAvatarPreview(null);
-    setAvatarData(null); // null = explicitly remove
+    setAvatarData(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -111,7 +106,6 @@ export default function ProfileEditor({ isOpen, onClose }) {
       bio: bio.trim() || null,
     };
 
-    // Only include avatar if it changed
     if (avatarData !== undefined) {
       profileData.avatarUrl = avatarData;
     }
@@ -132,6 +126,7 @@ export default function ProfileEditor({ isOpen, onClose }) {
   }, [displayName, bio, avatarData, updateProfile, onClose]);
 
   const handleClose = useCallback(() => {
+    setInitialized(false);
     setDisplayName('');
     setBio('');
     setAvatarPreview(null);

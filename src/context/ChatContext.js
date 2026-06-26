@@ -1013,6 +1013,21 @@ export function ChatProvider({ children }) {
           privateKeyRef.current = await importPrivateKey(privKeyJwk);
 
           const parsedUser = JSON.parse(savedUser);
+
+          // Fetch fresh profile data from server (handles old accounts without profile fields)
+          try {
+            const profileRes = await fetch(`/api/profile?userId=${parsedUser.id}`);
+            if (profileRes.ok) {
+              const profileData = await profileRes.json();
+              parsedUser.displayName = profileData.displayName || null;
+              parsedUser.avatarUrl = profileData.avatarUrl || null;
+              parsedUser.bio = profileData.bio || null;
+              localStorage.setItem('cipherchat_user', JSON.stringify(parsedUser));
+            }
+          } catch {
+            // Profile fetch failed — continue with cached data
+          }
+
           setUser(parsedUser);
           setToken(savedToken);
           initSocket(parsedUser.id, parsedUser.username);
